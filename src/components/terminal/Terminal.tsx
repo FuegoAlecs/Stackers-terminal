@@ -176,145 +176,127 @@ const Terminal: React.FC<TerminalProps> = ({
   }
 
   const handleKeyPress = (key: string, ev: KeyboardEvent) => {
-    const term = xtermRef.current
-    if (!term || isProcessing) return
+    const term = xtermRef.current;
+    if (!term || isProcessing) return;
 
     switch (ev.key) {
       case 'Enter':
-        writeToTerminal('')
-        handleCommand(currentLine)
-        break
+        ev.preventDefault();
+        writeToTerminal(''); // Echo newline visually in terminal
+        if (currentLine.trim().length > 0) { // Only process if there's a command
+          handleCommand(currentLine); // Restore the actual call to handleCommand
+        } else {
+          // If the line is empty, just show a new prompt without processing
+          setCurrentLine('');
+          setHistoryIndex(-1);
+          setTempCommand('');
+          writePrompt();
+        }
+        // Note: setCurrentLine, setHistoryIndex, setTempCommand, writePrompt are called inside handleCommand's finally block
+        break;
 
       case 'Backspace':
+        ev.preventDefault();
         if (currentLine.length > 0) {
-          setCurrentLine(prev => prev.slice(0, -1))
-          term.write('\b \b')
+          setCurrentLine(prev => prev.slice(0, -1));
+          term.write('\b \b'); // Visual backspace
         }
-        break
+        break;
 
       case 'ArrowUp':
-        ev.preventDefault()
-        navigateHistory('up')
-        break
+        ev.preventDefault();
+        navigateHistory('up');
+        break;
 
       case 'ArrowDown':
-        ev.preventDefault()
-        navigateHistory('down')
-        break
+        ev.preventDefault();
+        navigateHistory('down');
+        break;
 
       case 'Tab':
-        ev.preventDefault()
-        // Enhanced tab completion using the router (includes aliases)
+        ev.preventDefault();
         if (currentLine.trim()) {
-          const suggestions = commandRouter.getSuggestions(currentLine.trim())
-          
+          const suggestions = commandRouter.getSuggestions(currentLine.trim());
           if (suggestions.length === 1) {
-            const completion = suggestions[0].substring(currentLine.length)
-            term.write(completion)
-            setCurrentLine(prev => prev + completion)
+            const completion = suggestions[0].substring(currentLine.length);
+            term.write(completion);
+            setCurrentLine(prev => prev + completion);
           } else if (suggestions.length > 1) {
-            writeToTerminal('')
-            writeToTerminal(suggestions.join('  '))
-            writePrompt()
-            term.write(currentLine)
+            writeToTerminal('');
+            writeToTerminal(suggestions.join('  '));
+            writePrompt();
+            term.write(currentLine);
           }
         }
-        break
+        break;
 
       case 'Escape':
-        // Clear current line
-        ev.preventDefault()
-        clearCurrentLine()
-        setCurrentLine('')
-        setHistoryIndex(-1)
-        setTempCommand('')
-        break
+        ev.preventDefault();
+        clearCurrentLine();
+        setCurrentLine('');
+        setHistoryIndex(-1);
+        setTempCommand('');
+        break;
 
-      case 'Home':
-        // Move cursor to beginning (simplified - just clear and rewrite)
-        ev.preventDefault()
-        clearCurrentLine()
-        term.write(currentLine)
-        break
-
-      case 'End':
-        // Move cursor to end (already at end in our implementation)
-        ev.preventDefault()
-        break
+      // Home and End could be restored if needed, but are less critical for core functionality.
 
       default:
-        // Handle printable characters
-        if (key.length === 1 && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
-          term.write(key)
-          setCurrentLine(prev => prev + key)
-          // Reset history navigation when typing
-          if (historyIndex !== -1) {
-            setHistoryIndex(-1)
-            setTempCommand('')
-          }
+        // Handle printable characters (including space, via ev.key)
+        if (ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+          term.write(ev.key);
+          setCurrentLine(prev => prev + ev.key);
+          // Reset history navigation when typing (will be relevant when history is restored)
+          // if (historyIndex !== -1) {
+          //   setHistoryIndex(-1);
+          //   setTempCommand('');
+          // }
         }
-        break
+        break;
     }
-  }
+  };
 
   useEffect(() => {
-    if (!terminalRef.current) return
+    if (!terminalRef.current) {
+      // console.error("DEBUG: terminalRef.current is null in useEffect");
+      return;
+    }
 
-    // Initialize xterm with enhanced theme
+    // console.log("DEBUG: Initializing XTerm basic");
     const term = new XTerm({
       cursorBlink: true,
-      cursorStyle: 'block',
       fontSize: 14,
-      fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-      theme: {
-        background: '#0a0a0a',
-        foreground: '#ffffff',
-        cursor: '#00ff00',
-        selection: '#3e3e3e',
-        black: '#000000',
-        red: '#ff6b6b',
-        green: '#51cf66',
-        yellow: '#ffd43b',
-        blue: '#74c0fc',
-        magenta: '#f06292',
-        cyan: '#4dd0e1',
-        white: '#ffffff',
-        brightBlack: '#666666',
-        brightRed: '#ff8a80',
-        brightGreen: '#69f0ae',
-        brightYellow: '#ffff8d',
-        brightBlue: '#82b1ff',
-        brightMagenta: '#ff80ab',
-        brightCyan: '#84ffff',
-        brightWhite: '#ffffff'
-      },
-      cols: 80,
-      rows: 24,
-      allowTransparency: true
-    })
+      theme: { background: '#0a0a0a', foreground: '#ffffff' } // Minimal theme
+    });
 
-    // Initialize fit addon
-    const fitAddon = new FitAddon()
-    term.loadAddon(fitAddon)
+    try {
+      term.open(terminalRef.current);
+      // console.log("DEBUG: XTerm opened");
+    } catch (e) {
+      // console.error("DEBUG: Error opening XTerm:", e);
+      return;
+    }
 
-    // Open terminal
-    term.open(terminalRef.current)
-    fitAddon.fit()
+    term.write("A"); // Write a single character
+    xtermRef.current = term;
 
-    // Store references
-    xtermRef.current = term
-    fitAddonRef.current = fitAddon
+    // Restore fitAddon and resize listener
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    requestAnimationFrame(() => { // Keep deferred fit
+      fitAddon.fit();
+    });
+    fitAddonRef.current = fitAddon;
 
-    // Set up event listeners
+    // Restore onKey listener
     term.onKey(({ key, domEvent }) => {
-      handleKeyPress(key, domEvent)
-    })
+      handleKeyPress(key, domEvent);
+    });
 
-    // Enhanced welcome message with colors
+    // Restore Enhanced welcome message with colors
     const printer = createPrinter({
       write: writeToTerminal,
       clear: () => term.clear()
-    })
+    });
 
     const showWelcome = async () => {
       await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' })
@@ -326,15 +308,14 @@ const Terminal: React.FC<TerminalProps> = ({
       })
       await printer.print('   Your Onchain CLI Experience   ', {
         color: 'cyan',
-        style: 'bold', // Added bold style
+        style: 'bold',
         typing: true,
         typingSpeed: 30
       })
       await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' })
       await printer.print('')
       
-      // The welcomeMessage prop is already updated, this will use the new default
-      await printer.info(welcomeMessage, true)
+      await printer.info(welcomeMessage, true) // welcomeMessage prop is already updated
       await printer.print('')
       await printer.print('💡 Quick Start Commands:', { color: 'yellow', style: 'bold' })
       await printer.print('  📚 tutorials        - Interactive learning guides')
@@ -346,23 +327,25 @@ const Terminal: React.FC<TerminalProps> = ({
       await printer.print('')
       writePrompt()
     }
+    showWelcome();
 
-    showWelcome()
-
-    // Handle window resize
+    // Restore resize listener
     const handleResize = () => {
-      fitAddon.fit()
-    }
-    window.addEventListener('resize', handleResize)
+      if (fitAddonRef.current) {
+        fitAddonRef.current.fit();
+      }
+    };
+    window.addEventListener('resize', handleResize);
 
-    // Cleanup
     return () => {
-      window.removeEventListener('resize', handleResize)
-      term.dispose()
-    }
-  }, [])
+      window.removeEventListener('resize', handleResize);
+      term.dispose();
+      // console.log("DEBUG: XTerm disposed");
+    };
+  }, []); // Empty dependency array means this runs once on mount
 
   // Update prompt when wallet connection changes
+  // Temporarily commenting out to reduce variables during debug
   useEffect(() => {
     // This will trigger a re-render of the prompt on wallet state changes
   }, [walletContext.isConnected, walletContext.address])
@@ -377,8 +360,8 @@ const Terminal: React.FC<TerminalProps> = ({
       {/* Terminal Content */}
       <div 
         ref={terminalRef} 
-        className="flex-grow w-full focus:outline-none p-2" // flex-grow to take available space, some padding for aesthetics
-        // Removed fixed height style, bg-gradient removed, using bg-black from parent
+        className="flex-grow w-full focus:outline-none p-2" // flex-grow to take available space
+        style={{ border: '1px solid red', minHeight: '100px' }} // DEBUG: Force visibility and min size
       />
     </div>
   )
