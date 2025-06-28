@@ -1,5 +1,7 @@
-import solc from 'solc'
+// REMOVED: import solc from 'solc'
 
+// Ensure this type is defined and exported, matching the worker's expectation.
+// The worker already imports this, so it should be fine.
 export interface CompilationResult {
   success: boolean
   contracts?: {
@@ -190,102 +192,106 @@ contract SimpleToken {
   }
 }
 
+// Create a single worker instance to be reused
+// Vite specific: Uses `type: 'module'` for modern worker syntax
+let solcWorker: Worker | null = null;
+
+function getSolcWorker(): Worker {
+  if (!solcWorker) {
+    console.log('[Main] Creating Solc Worker');
+    solcWorker = new Worker(new URL('../workers/solc.worker.ts', import.meta.url), {
+      type: 'module'
+    });
+
+    solcWorker.onmessageerror = (event) => {
+      console.error('[Main] Error message from Solc Worker:', event);
+    };
+    solcWorker.onerror = (event) => {
+      console.error('[Main] Uncaught error in Solc Worker:', event.message, event.error);
+    };
+  }
+  return solcWorker;
+}
+
+
 /**
- * Compile Solidity source code using solc-js
+ * Pre-initializes the Solc worker and loads a specific compiler version.
+ * Call this early if you know a specific version will be needed.
+ */
+export async function initializeSolcWorker(solcVersion: string = '0.8.26'): Promise<{success: boolean, version?: string, error?: string}> {
+  const worker = getSolcWorker();
+  return new Promise((resolve) => {
+    worker.onmessage = (event: MessageEvent) => {
+      if (event.data.action === 'versionLoaded' || event.data.action === 'versionLoadFailed') {
+        resolve(event.data);
+      }
+    };
+    worker.postMessage({ action: 'loadVersion', payload: { solcVersion } });
+  });
+}
+
+
+/**
+ * Compile Solidity source code using the Web Worker
  */
 export async function compileSolidity(
-  contractName: string,
-  sourceCode?: string
+  contractSourceName: string, // Renamed from contractName to match worker's expectation
+  sourceCode?: string,
+  solcVersion: string = '0.8.26' // Allow specifying solc version
 ): Promise<CompilationResult> {
-  try {
-    // Use provided source code or get from samples
-    let source: string
-    if (sourceCode) {
-      source = sourceCode
-    } else if (SAMPLE_CONTRACTS[contractName]) {
-      source = SAMPLE_CONTRACTS[contractName].content
-    } else {
-      return {
-        success: false,
-        errors: [`Contract '${contractName}' not found in available contracts`]
-      }
-    }
+  const worker = getSolcWorker();
 
-    // Prepare the input for the compiler
-    const input = {
-      language: 'Solidity',
-      sources: {
-        [contractName]: {
-          content: source
-        }
-      },
-      settings: {
-        outputSelection: {
-          '*': {
-            '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode', 'evm.gasEstimates', 'metadata']
-          }
-        },
-        optimizer: {
-          enabled: true,
-          runs: 200
-        }
-      }
-    }
-
-    // Compile the contract
-    const output = JSON.parse(solc.compile(JSON.stringify(input)))
-
-    // Check for errors
-    const errors: string[] = []
-    const warnings: string[] = []
-
-    if (output.errors) {
-      output.errors.forEach((error: any) => {
-        if (error.severity === 'error') {
-          errors.push(error.formattedMessage || error.message)
-        } else {
-          warnings.push(error.formattedMessage || error.message)
-        }
-      })
-    }
-
-    // If there are compilation errors, return them
-    if (errors.length > 0) {
-      return {
-        success: false,
-        errors,
-        warnings
-      }
-    }
-
-    // Extract compiled contracts
-    const contracts: { [contractName: string]: any } = {}
-    
-    if (output.contracts && output.contracts[contractName]) {
-      Object.keys(output.contracts[contractName]).forEach(contract => {
-        const compiledContract = output.contracts[contractName][contract]
-        contracts[contract] = {
-          abi: compiledContract.abi || [],
-          bytecode: compiledContract.evm?.bytecode?.object || '',
-          deployedBytecode: compiledContract.evm?.deployedBytecode?.object || '',
-          gasEstimates: compiledContract.evm?.gasEstimates,
-          metadata: compiledContract.metadata
-        }
-      })
-    }
-
-    return {
-      success: true,
-      contracts,
-      warnings: warnings.length > 0 ? warnings : undefined
-    }
-
-  } catch (error) {
+  // Use provided source code or get from samples
+  let finalSourceCode: string;
+  if (sourceCode) {
+    finalSourceCode = sourceCode;
+  } else if (SAMPLE_CONTRACTS[contractSourceName]) {
+    finalSourceCode = SAMPLE_CONTRACTS[contractSourceName].content;
+  } else {
     return {
       success: false,
-      errors: [`Compilation failed: ${error instanceof Error ? error.message : 'Unknown error'}`]
-    }
+      errors: [`Contract source '${contractSourceName}' not found in available samples or provided code.`]
+    };
   }
+
+  return new Promise<CompilationResult>((resolve, reject) => {
+    const messageId = Date.now() + Math.random(); // Simple unique ID for the message
+
+    const messageHandler = (event: MessageEvent) => {
+      // Ensure we're handling the response for *this* request if multiple are in flight
+      // For now, assuming one compilation at a time or worker handles queueing.
+      // A more robust solution would involve matching a request ID.
+      // The current worker processes one message at a time.
+      console.log('[Main] Received message from worker:', event.data);
+      if (event.data && typeof event.data.success === 'boolean') { // Check if it's a CompilationResult like message
+        worker.removeEventListener('message', messageHandler); // Clean up listener
+        resolve(event.data as CompilationResult);
+      }
+    };
+
+    const errorHandler = (event: ErrorEvent) => {
+      console.error('[Main] Error from Solc Worker during compilation:', event);
+      worker.removeEventListener('message', messageHandler); // Clean up listener
+      worker.removeEventListener('error', errorHandler);
+      reject({
+        success: false,
+        errors: [`Worker error during compilation: ${event.message}`]
+      } as CompilationResult);
+    };
+
+    worker.addEventListener('message', messageHandler);
+    worker.addEventListener('error', errorHandler); // Catch general worker errors for this operation
+
+    console.log(`[Main] Posting 'compile' message to worker for ${contractSourceName} with version ${solcVersion}`);
+    worker.postMessage({
+      action: 'compile',
+      payload: {
+        contractSourceName, // This is the filename e.g. "Hello.sol"
+        sourceCode: finalSourceCode,
+        solcVersion
+      }
+    });
+  });
 }
 
 /**
