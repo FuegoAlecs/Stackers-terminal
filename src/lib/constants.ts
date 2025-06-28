@@ -1,4 +1,4 @@
-export const APP_NAME = 'My App'
+export const APP_NAME = 'Stackers'
 export const APP_DESCRIPTION = 'A modern React application built with Vite and TypeScript'
 
 export const ROUTES = {

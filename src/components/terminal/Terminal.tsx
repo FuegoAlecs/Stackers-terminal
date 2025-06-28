@@ -20,7 +20,7 @@ interface TerminalProps {
 const Terminal: React.FC<TerminalProps> = ({
   className,
   prompt = '$ ',
-  welcomeMessage = 'Welcome to the Web3 Terminal! Type "help" for commands or "tutorials" to get started.'
+  welcomeMessage = "🚀 Welcome to Stackers! Type 'help' for commands or 'tutorials' to get started."
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
@@ -318,13 +318,13 @@ const Terminal: React.FC<TerminalProps> = ({
 
     const showWelcome = async () => {
       await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' })
-      await printer.print('   WELCOME TO WEB3 TERMINAL   ', { 
+      await printer.print('      WELCOME TO STACKERS      ', {
         color: 'blue', 
         style: 'bold',
         typing: true,
         typingSpeed: 50
       })
-      await printer.print('   Blockchain development made easy   ', { 
+      await printer.print('   Your Onchain CLI Experience   ', {
         color: 'cyan',
         typing: true,
         typingSpeed: 30
@@ -332,6 +332,7 @@ const Terminal: React.FC<TerminalProps> = ({
       await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' })
       await printer.print('')
       
+      // The welcomeMessage prop is already updated, this will use the new default
       await printer.info(welcomeMessage, true)
       await printer.print('')
       await printer.print('💡 Quick Start Commands:', { color: 'yellow', style: 'bold' })
