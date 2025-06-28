@@ -461,7 +461,6 @@ function createWriteFunctionAbi(functionName: string, argCount: number, isPayabl
     'setMessage': 'function setMessage(string)',
     'set': 'function set(uint256)',
     'setUserValue': 'function setUserValue(uint256)',
-    'withdraw': 'function withdraw(uint256)',
     'mint': 'function mint(uint256)',
     'burn': 'function burn(uint256)',
     

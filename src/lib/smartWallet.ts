@@ -11,9 +11,10 @@ import {
   AlchemyGasManagerMiddleware
 } from '@alchemy/aa-alchemy'
 import { 
-  SimpleSmartAccount, // Corrected name
-  type SimpleSmartAccountParams // Corrected name
-} from '@alchemy/aa-accounts'
+  createLightAccount,
+  type CreateLightAccountParams,
+  type LightAccount
+} from "@account-kit/smart-contracts";
 import { createWalletClient, custom, type WalletClient, type Address } from 'viem'
 import { NETWORK_INFO } from './alchemy'
 
@@ -102,13 +103,13 @@ export class SmartWalletManager {
         })
       } else {
         // Standard smart account without gasless features
-        const account = await SimpleSmartAccount.create({ // Corrected usage
+      const account: LightAccount = await createLightAccount({
           transport: custom(window.ethereum),
           chain: NETWORK_INFO.viemChain,
           signer,
           factoryAddress: getDefaultSimpleAccountFactoryAddress(NETWORK_INFO.viemChain),
           salt: 0n
-        });
+      } as CreateLightAccountParams); // Added type assertion for params
         this.client = createSmartAccountClient({
           transport: custom(window.ethereum),
           chain: NETWORK_INFO.viemChain,

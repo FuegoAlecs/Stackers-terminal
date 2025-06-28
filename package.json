@@ -13,7 +13,7 @@
   "dependencies": {
     "@alchemy/aa-core": "^3.0.0",
     "@alchemy/aa-alchemy": "^3.0.0",
-    "@alchemy/aa-accounts": "^3.0.0",
+    "@account-kit/smart-contracts": "^4.47.0",
     "@rainbow-me/rainbowkit": "^2.0.0",
     "@tanstack/react-query": "^5.0.0",
     "alchemy-sdk": "^3.3.1",
