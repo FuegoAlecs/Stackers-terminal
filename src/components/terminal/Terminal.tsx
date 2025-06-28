@@ -326,6 +326,7 @@ const Terminal: React.FC<TerminalProps> = ({
       })
       await printer.print('   Your Onchain CLI Experience   ', {
         color: 'cyan',
+        style: 'bold', // Added bold style
         typing: true,
         typingSpeed: 30
       })
@@ -338,6 +339,7 @@ const Terminal: React.FC<TerminalProps> = ({
       await printer.print('💡 Quick Start Commands:', { color: 'yellow', style: 'bold' })
       await printer.print('  📚 tutorials        - Interactive learning guides')
       await printer.print('  💰 wallet connect   - Connect your Web3 wallet')
+      await printer.print('  📊 wallet status    - Check current wallet status')
       await printer.print('  📋 help             - Show all available commands')
       await printer.print('  🔗 alias            - Create command shortcuts')
       await printer.print('  🎬 script           - Automate command sequences')
