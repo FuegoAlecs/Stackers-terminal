@@ -366,71 +366,16 @@ const Terminal: React.FC<TerminalProps> = ({
 
   return (
     <div className={cn(
-      'bg-black rounded-lg border border-gray-800 overflow-hidden shadow-2xl',
+      'w-screen h-screen flex flex-col bg-black', // Full screen, flex column
       className
     )}>
-      {/* Terminal Header */}
-      <div className="bg-gray-900 px-4 py-2 flex items-center justify-between border-b border-gray-800">
-        <div className="flex items-center space-x-2">
-          <div className="flex space-x-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full hover:bg-red-400 transition-colors cursor-pointer"></div>
-            <div className="w-3 h-3 bg-yellow-500 rounded-full hover:bg-yellow-400 transition-colors cursor-pointer"></div>
-            <div className="w-3 h-3 bg-green-500 rounded-full hover:bg-green-400 transition-colors cursor-pointer"></div>
-          </div>
-          <div className="text-gray-400 text-sm font-medium ml-4 flex items-center">
-            <span className="mr-2">💻</span>
-            Web3 Terminal
-          </div>
-        </div>
-        
-        {/* Enhanced Status Indicators */}
-        <div className="flex items-center space-x-4">
-          {/* Processing Indicator */}
-          {isProcessing && (
-            <div className="flex items-center space-x-2 text-orange-400 text-sm">
-              <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-              <span>Processing...</span>
-            </div>
-          )}
-          
-          {/* Script Status */}
-          <div className="flex items-center space-x-2 text-yellow-400 text-sm hover:text-yellow-300 transition-colors">
-            <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-            <span>{Object.keys(session.scripts).length} scripts</span>
-          </div>
-          
-          {/* Alias Status */}
-          <div className="flex items-center space-x-2 text-purple-400 text-sm hover:text-purple-300 transition-colors">
-            <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
-            <span>{Object.keys(session.aliases).length} aliases</span>
-          </div>
-          
-          {/* History Status */}
-          <div className="flex items-center space-x-2 text-blue-400 text-sm hover:text-blue-300 transition-colors">
-            <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-            <span>{session.commandHistory.length} cmds</span>
-          </div>
-          
-          {/* Wallet Status Indicator */}
-          {walletContext.isConnected ? (
-            <div className="flex items-center space-x-2 text-green-400 text-sm hover:text-green-300 transition-colors">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span>{walletContext.formatAddress(walletContext.address)}</span>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2 text-gray-500 text-sm hover:text-gray-400 transition-colors">
-              <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
-              <span>No Wallet</span>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Terminal Header Removed */}
       
       {/* Terminal Content */}
       <div 
         ref={terminalRef} 
-        className="p-4 h-96 focus:outline-none bg-gradient-to-b from-black to-gray-900"
-        style={{ height: '400px' }}
+        className="flex-grow w-full focus:outline-none p-2" // flex-grow to take available space, some padding for aesthetics
+        // Removed fixed height style, bg-gradient removed, using bg-black from parent
       />
     </div>
   )

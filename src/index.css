@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full w-full m-0 p-0 overflow-hidden bg-black;
+  }
+  /* Ensure WalletProvider and ErrorBoundary (if they render divs) also don't break layout */
+  /* This might not be necessary if they render fragments or don't add layout-breaking styles */
+  /* For now, focusing on html, body, #root */
+}
