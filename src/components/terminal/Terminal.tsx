@@ -321,15 +321,15 @@ const Terminal: React.FC<TerminalProps> = ({
 
     const showWelcome = async () => {
       await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' });
-      await printer.print('      WELCOME TO STACKERS      ', {
+      await printer.print('      StACkeRS      ', { // Changed text here
         color: 'blue', 
-        style: 'bold',
+        style: 'bold', // Ensured bold style
         typing: true,
         typingSpeed: 50
       });
       await printer.print('   Your Onchain CLI Experience   ', {
         color: 'cyan',
-        style: 'bold',
+        style: 'bold', // Kept bold for subtitle
         typing: true,
         typingSpeed: 30
       });
