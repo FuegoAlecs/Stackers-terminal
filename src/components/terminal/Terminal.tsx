@@ -205,23 +205,33 @@ const Terminal: React.FC<TerminalProps> = ({
   }
 
   const handleKeyPress = (key: string, ev: KeyboardEvent) => {
+    console.log(`[DEBUG_KEYPRESS] handleKeyPress called. Key: "${ev.key}", Ctrl: ${ev.ctrlKey}, Alt: ${ev.altKey}, Meta: ${ev.metaKey}`);
     const term = xtermRef.current;
-    if (!term || isProcessing) return;
+
+    console.log(`[DEBUG_KEYPRESS] Before guard: term exists? ${!!term}, isProcessing? ${isProcessing}`);
+    if (!term || isProcessing) {
+      console.log(`[DEBUG_KEYPRESS] Guard prevented further execution. term: ${term}, isProcessing: ${isProcessing}`);
+      return;
+    }
 
     switch (ev.key) {
       case 'Enter':
+        console.log('[DEBUG_KEYPRESS] "Enter" key detected.');
         ev.preventDefault();
         writeToTerminal(''); // Echo newline visually in terminal
+
+        console.log(`[DEBUG_KEYPRESS] Current line before trim: "${currentLine}"`);
         if (currentLine.trim().length > 0) { // Only process if there's a command
-          handleCommand(currentLine); // Restore the actual call to handleCommand
+          console.log(`[DEBUG_KEYPRESS] Non-empty command: "${currentLine.trim()}". Calling handleCommand.`);
+          handleCommand(currentLine);
         } else {
+          console.log('[DEBUG_KEYPRESS] Empty command. Writing new prompt.');
           // If the line is empty, just show a new prompt without processing
           setCurrentLine('');
           setHistoryIndex(-1);
           setTempCommand('');
           writePrompt();
         }
-        // Note: setCurrentLine, setHistoryIndex, setTempCommand, writePrompt are called inside handleCommand's finally block
         break;
 
       case 'Backspace':
@@ -285,7 +295,13 @@ const Terminal: React.FC<TerminalProps> = ({
   };
 
   useEffect(() => {
-    if (!terminalRef.current) return
+    console.log('[DEBUG_EFFECT] useEffect run started. welcomeMessage:', welcomeMessage);
+
+    if (!terminalRef.current) {
+      console.log('[DEBUG_EFFECT] terminalRef.current (div) is NULL, returning.');
+      return;
+    }
+    console.log('[DEBUG_EFFECT] terminalRef.current (div) exists.');
 
     // Initialize xterm with enhanced theme
     const term = new XTerm({
@@ -318,29 +334,51 @@ const Terminal: React.FC<TerminalProps> = ({
       },
       allowTransparency: true // If you want to use background from CSS
     });
+    console.log('[DEBUG_EFFECT] XTerm instance created.');
 
     // Initialize fit addon
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+    console.log('[DEBUG_EFFECT] FitAddon loaded.');
 
     // Open terminal
-    term.open(terminalRef.current);
+    try {
+      term.open(terminalRef.current);
+      console.log('[DEBUG_EFFECT] term.open() called successfully.');
+    } catch (e) {
+      console.error('[DEBUG_EFFECT] Error calling term.open():', e);
+      return; // Stop if term.open fails
+    }
+
 
     // Initial fit, possibly defer slightly to ensure layout is stable
     requestAnimationFrame(() => {
       if (fitAddonRef.current) { // Check if still mounted
          fitAddonRef.current.fit();
+         console.log('[DEBUG_EFFECT] fitAddon.fit() called in requestAnimationFrame.');
+      } else {
+        console.log('[DEBUG_EFFECT] fitAddonRef.current is NULL in requestAnimationFrame.');
       }
     });
 
     // Store references
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
+    console.log('[DEBUG_EFFECT] xtermRef.current and fitAddonRef.current assigned.');
+    if (xtermRef.current) {
+      console.log('[DEBUG_EFFECT] xtermRef.current is now an XTerm object.');
+    } else {
+      console.error('[DEBUG_EFFECT] xtermRef.current is STILL NULL after assignment attempt.');
+    }
+
 
     // Set up event listeners
+    console.log('[DEBUG_EFFECT] Setting up term.onKey listener...');
     term.onKey(({ key, domEvent }) => {
+      // console.log('[DEBUG_EFFECT] term.onKey fired. Key:', key); // This might be too noisy for every key
       handleKeyPress(key, domEvent);
     });
+    console.log('[DEBUG_EFFECT] term.onKey listener SET.');
 
     // Enhanced welcome message with colors
     const printer = createPrinter({
@@ -349,6 +387,7 @@ const Terminal: React.FC<TerminalProps> = ({
     });
 
     const showWelcome = async () => {
+      console.log('[DEBUG_EFFECT] showWelcome() called.');
       const stackersAscii = [ // Restored variable name and content
         "  _________ __             __      __                     ",
         " /   _____//  |______ ____ |  | ___/  |_  ____   ____ ___ ",
@@ -358,25 +397,12 @@ const Terminal: React.FC<TerminalProps> = ({
         "        \\/            \\/     \\/        \\/           \\/     \\/     \\/ "
       ];
 
-      // Original padding and border logic for the wider ASCII art
       const titlePadding = ' '.repeat(Math.max(0, Math.floor((80 - stackersAscii[0].length) / 2)));
-      // The original border was a fixed width, or dynamically calculated. Let's assume it was 76 for the '═' part.
-      // Or, more robustly, based on the art itself: stackersAscii[0].length.
-      // The previous commit used '═'.repeat(76) which is 76 chars + 2 rockets = 78 total.
-      // The previous ASCII art line is 66 chars. (80-66)/2 = 7 padding. 7+66+7 = 80.
-      // A border of 76 for '═' seems appropriate if the art itself is padded to be around that.
-      // Let's use a dynamic approach based on the restored art's actual width for precision.
-      const originalBorderLength = stackersAscii[0].length + 0; // Border should match the art width directly if padding is outside
-                                                              // Or, if padding is inside the border print:
-                                                              // '🚀' + padding + art + padding + '🚀'
-                                                              // The previous version was: printer.print('🚀' + '═'.repeat(76) + '🚀', ...);
-                                                              // This implies the content inside was expected to be less than 76.
-                                                              // The ASCII art itself is 66 chars.
-                                                              // Let's stick to the previous '═'.repeat(76) for the horizontal rule.
+      const originalBorderLength = stackersAscii[0].length + 0;
 
       await printer.print('🚀' + '═'.repeat(76) + '🚀', { color: 'blue', style: 'bold' });
       for (const line of stackersAscii) {
-        await printer.print(titlePadding + line, { // Using titlePadding here
+        await printer.print(titlePadding + line, {
           color: 'blue',
           style: 'bold',
           typing: false,
@@ -405,6 +431,7 @@ const Terminal: React.FC<TerminalProps> = ({
       await printer.print('  🎬 script           - Automate command sequences');
       await printer.print('');
       writePrompt();
+      console.log('[DEBUG_EFFECT] showWelcome() finished.');
     };
 
     showWelcome();
@@ -416,15 +443,28 @@ const Terminal: React.FC<TerminalProps> = ({
       }
     };
     window.addEventListener('resize', handleResize);
+    console.log('[DEBUG_EFFECT] Resize listener added.');
 
     // Cleanup
     return () => {
+      console.log('[DEBUG_EFFECT] useEffect cleanup function running.');
       window.removeEventListener('resize', handleResize);
-      if (xtermRef.current) { // Ensure it exists before disposing
+      console.log('[DEBUG_EFFECT] Resize listener removed.');
+      if (xtermRef.current) {
+        console.log('[DEBUG_EFFECT] Disposing xtermRef.current.');
         xtermRef.current.dispose();
+        xtermRef.current = null; // Explicitly set to null
+        console.log('[DEBUG_EFFECT] xtermRef.current disposed and nulled.');
+      } else {
+        console.log('[DEBUG_EFFECT] xtermRef.current was already null in cleanup.');
+      }
+      if (fitAddonRef.current) {
+        // fitAddon does not have a dispose method. Nullifying the ref is enough.
+        fitAddonRef.current = null;
+        console.log('[DEBUG_EFFECT] fitAddonRef.current nulled.');
       }
     };
-  }, [welcomeMessage]); // Added welcomeMessage to dependency array for showWelcome
+  }, [welcomeMessage]);
 
   // Update prompt when wallet connection changes
   useEffect(() => {
