@@ -297,6 +297,25 @@ export function createPrinter(terminal: TerminalPrinter) {
      */
     clear: function () { // `this` is not relevant for terminal.clear directly
       terminal.clear()
+    },
+
+    /**
+     * Formats and prints an array of help items as a table.
+     */
+    printHelpTable: async function (
+      rows: HelpTableRow[],
+      commandHeader?: string,
+      descriptionHeader?: string,
+      usageHeader?: string, // Added to match formatHelpTable
+      options: PrintOptions = {} // Allow passing through other print options
+    ) {
+      const formattedString = formatHelpTable(rows, commandHeader, descriptionHeader, usageHeader);
+      // Ensure tables are not typed out char by char, and handle potential empty string from formatHelpTable
+      if (formattedString && formattedString !== 'No commands to display.') {
+        await this.print(formattedString, { ...options, typing: false });
+      } else {
+        await this.print(formattedString, { ...options }); // Print "No commands..." normally
+      }
     }
   }
   return printer
@@ -372,4 +391,56 @@ export async function printBanner(
     style: 'bold'
   })
   await printer.print('', { newLine: true })
+}
+
+// Interface for help table rows
+export interface HelpTableRow {
+  command: string;
+  description: string;
+  usage?: string; // Optional, can be combined with command or shown separately
+}
+
+/**
+ * Formats an array of command objects into a fixed-width, table-like string.
+ */
+export function formatHelpTable(
+  rows: HelpTableRow[],
+  commandHeader = 'COMMAND',
+  descriptionHeader = 'DESCRIPTION',
+  usageHeader = 'USAGE' // Kept for flexibility, though might combine command & usage
+): string {
+  if (!rows || rows.length === 0) {
+    return 'No commands to display.';
+  }
+
+  // Determine column for command name (or usage string if preferred)
+  // For this version, we'll display command name and usage in the first column if usage is short,
+  // or just command name if usage is long or not present.
+  // A more sophisticated version might have three columns or handle this differently.
+
+  const firstColumnData = rows.map(row => row.usage || row.command);
+  const firstColumnHeader = rows.some(r => r.usage) ? usageHeader : commandHeader;
+
+  const minFirstColWidth = firstColumnHeader.length;
+  const maxFirstColWidth = Math.max(
+    minFirstColWidth,
+    ...firstColumnData.map(cmdOrUsage => cmdOrUsage.length)
+  );
+
+  const columnGap = ' | '; // Defines the visual separator and its spacing
+
+  let output = '';
+
+  // Header
+  output += firstColumnHeader.padEnd(maxFirstColWidth) + columnGap + descriptionHeader + '\n';
+  output += '-'.repeat(maxFirstColWidth) + columnGap.replace(/ /g, '-') + '-'.repeat(descriptionHeader.length) + '\n';
+
+  // Rows
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const firstColEntry = firstColumnData[i];
+    output += firstColEntry.padEnd(maxFirstColWidth) + columnGap + row.description + '\n';
+  }
+
+  return output;
 }
