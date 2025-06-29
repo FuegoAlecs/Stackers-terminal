@@ -256,80 +256,102 @@ const Terminal: React.FC<TerminalProps> = ({
   };
 
   useEffect(() => {
-    if (!terminalRef.current) {
-      // console.error("DEBUG: terminalRef.current is null in useEffect");
-      return;
-    }
+    if (!terminalRef.current) return
 
-    // console.log("DEBUG: Initializing XTerm basic");
+    // Initialize xterm with enhanced theme
     const term = new XTerm({
       cursorBlink: true,
+      cursorStyle: 'block', // Ensure block cursor
       fontSize: 14,
-      theme: { background: '#0a0a0a', foreground: '#ffffff' } // Minimal theme
+      fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+      theme: {
+        background: '#0a0a0a', // Dark background
+        foreground: '#ffffff', // White text
+        cursor: '#00ff00',     // Green cursor
+        cursorAccent: '#000000', // Background of the cursor character (black for green char)
+        selection: 'rgba(255, 255, 255, 0.3)', // Light selection
+        black: '#000000',
+        red: '#ff6b6b',
+        green: '#51cf66',
+        yellow: '#f5c945', // Brighter yellow
+        blue: '#74c0fc',
+        magenta: '#f06292',
+        cyan: '#4dd0e1',
+        white: '#ffffff',
+        brightBlack: '#686868',
+        brightRed: '#ff8a80',
+        brightGreen: '#69f0ae',
+        brightYellow: '#ffee58', // Brighter yellow
+        brightBlue: '#82b1ff',
+        brightMagenta: '#ff80ab',
+        brightCyan: '#84ffff',
+        brightWhite: '#ffffff'
+      },
+      allowTransparency: true // If you want to use background from CSS
     });
 
-    try {
-      term.open(terminalRef.current);
-      // console.log("DEBUG: XTerm opened");
-    } catch (e) {
-      // console.error("DEBUG: Error opening XTerm:", e);
-      return;
-    }
-
-    term.write("A"); // Write a single character
-    xtermRef.current = term;
-
-    // Restore fitAddon and resize listener
+    // Initialize fit addon
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    requestAnimationFrame(() => { // Keep deferred fit
-      fitAddon.fit();
+
+    // Open terminal
+    term.open(terminalRef.current);
+
+    // Initial fit, possibly defer slightly to ensure layout is stable
+    requestAnimationFrame(() => {
+      if (fitAddonRef.current) { // Check if still mounted
+         fitAddonRef.current.fit();
+      }
     });
+
+    // Store references
+    xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Restore onKey listener
+    // Set up event listeners
     term.onKey(({ key, domEvent }) => {
       handleKeyPress(key, domEvent);
     });
 
-    // Restore Enhanced welcome message with colors
+    // Enhanced welcome message with colors
     const printer = createPrinter({
       write: writeToTerminal,
-      clear: () => term.clear()
+      clear: () => { if(xtermRef.current) xtermRef.current.clear(); }
     });
 
     const showWelcome = async () => {
-      await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' })
+      await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' });
       await printer.print('      WELCOME TO STACKERS      ', {
         color: 'blue', 
         style: 'bold',
         typing: true,
         typingSpeed: 50
-      })
+      });
       await printer.print('   Your Onchain CLI Experience   ', {
         color: 'cyan',
         style: 'bold',
         typing: true,
         typingSpeed: 30
-      })
-      await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' })
-      await printer.print('')
+      });
+      await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' });
+      await printer.print('');
       
-      await printer.info(welcomeMessage, true) // welcomeMessage prop is already updated
-      await printer.print('')
-      await printer.print('💡 Quick Start Commands:', { color: 'yellow', style: 'bold' })
-      await printer.print('  📚 tutorials        - Interactive learning guides')
-      await printer.print('  💰 wallet connect   - Connect your Web3 wallet')
-      await printer.print('  📊 wallet status    - Check current wallet status')
-      await printer.print('  📋 help             - Show all available commands')
-      await printer.print('  🔗 alias            - Create command shortcuts')
-      await printer.print('  🎬 script           - Automate command sequences')
-      await printer.print('')
-      writePrompt()
-    }
+      await printer.info(welcomeMessage, true);
+      await printer.print('');
+      await printer.print('💡 Quick Start Commands:', { color: 'yellow', style: 'bold' });
+      await printer.print('  📚 tutorials        - Interactive learning guides');
+      await printer.print('  💰 wallet connect   - Connect your Web3 wallet');
+      await printer.print('  📊 wallet status    - Check current wallet status');
+      await printer.print('  📋 help             - Show all available commands');
+      await printer.print('  🔗 alias            - Create command shortcuts');
+      await printer.print('  🎬 script           - Automate command sequences');
+      await printer.print('');
+      writePrompt();
+    };
+
     showWelcome();
 
-    // Restore resize listener
+    // Handle window resize
     const handleResize = () => {
       if (fitAddonRef.current) {
         fitAddonRef.current.fit();
@@ -337,18 +359,24 @@ const Terminal: React.FC<TerminalProps> = ({
     };
     window.addEventListener('resize', handleResize);
 
+    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
-      term.dispose();
-      // console.log("DEBUG: XTerm disposed");
+      if (xtermRef.current) { // Ensure it exists before disposing
+        xtermRef.current.dispose();
+      }
     };
-  }, []); // Empty dependency array means this runs once on mount
+  }, [welcomeMessage]); // Added welcomeMessage to dependency array for showWelcome
 
   // Update prompt when wallet connection changes
-  // Temporarily commenting out to reduce variables during debug
   useEffect(() => {
-    // This will trigger a re-render of the prompt on wallet state changes
-  }, [walletContext.isConnected, walletContext.address])
+    if (xtermRef.current && !isProcessing && currentLine === '') { // Only rewrite prompt if not processing and line is empty
+      // This logic might need refinement to avoid disrupting user input
+      // For now, let's ensure prompt is updated after command execution or initial load.
+      // The prompt is naturally rewritten after each command in handleCommand's finally block.
+      // And initially by showWelcome.
+    }
+  }, [walletContext.isConnected, walletContext.address, isProcessing, currentLine]); // Added dependencies
 
   return (
     <div className={cn(
@@ -361,7 +389,7 @@ const Terminal: React.FC<TerminalProps> = ({
       <div 
         ref={terminalRef} 
         className="flex-grow w-full focus:outline-none p-2" // flex-grow to take available space
-        style={{ border: '1px solid red', minHeight: '100px' }} // DEBUG: Force visibility and min size
+        // DEBUG style removed: style={{ border: '1px solid red', minHeight: '100px' }}
       />
     </div>
   )

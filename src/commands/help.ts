@@ -9,6 +9,7 @@ export const helpCommand: CommandHandler = {
   
   execute: (context: CommandContext): CommandResult => {
     const { args } = context
+    // let debugOutput = "DEBUG: help command execute started\n"; // REMOVED DEBUG LINE
     
     if (args.length > 0) {
       // Show help for specific command
