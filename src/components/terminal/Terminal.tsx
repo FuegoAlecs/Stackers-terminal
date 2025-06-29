@@ -22,13 +22,39 @@ const Terminal: React.FC<TerminalProps> = ({
   prompt = '$ ',
   welcomeMessage = "🚀 Welcome to Stackers! Type 'help' for commands or 'tutorials' to get started."
 }) => {
-  const terminalRef = useRef<HTMLDivElement>(null)
-  const xtermRef = useRef<XTerm | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
-  const [currentLine, setCurrentLine] = useState('')
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const [tempCommand, setTempCommand] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+
+  // currentLine state is still useful for React's rendering cycle if needed,
+  // but we'll primarily use currentLineRef for the imperative onKey handler.
+  const [currentLine, _setCurrentLine] = useState('');
+  const currentLineRef = useRef('');
+
+  // Wrapper to set both state and ref
+  const setCurrentLine = (value: string | ((prev: string) => string)) => {
+    if (typeof value === 'function') {
+      _setCurrentLine(prev => {
+        const newValue = value(prev);
+        currentLineRef.current = newValue;
+        return newValue;
+      });
+    } else {
+      _setCurrentLine(value);
+      currentLineRef.current = value;
+    }
+  };
+
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [tempCommand, _setTempCommand] = useState('');
+  const tempCommandRef = useRef(''); // Ref for tempCommand as well for navigateHistory
+
+  const setTempCommand = (value: string) => {
+    _setTempCommand(value);
+    tempCommandRef.current = value;
+  };
+
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Get wallet context and session
   const walletContext = useWallet()
@@ -70,57 +96,33 @@ const Terminal: React.FC<TerminalProps> = ({
     const fullPrompt = `${walletPrompt}${prompt}`
     
     // Clear the line and rewrite prompt
-    term.write('\r' + ' '.repeat(fullPrompt.length + currentLine.length))
-    term.write('\r' + fullPrompt)
+    term.write('\r' + ' '.repeat(fullPrompt.length + currentLineRef.current.length)); // Use ref for length
+    term.write('\r' + fullPrompt);
   }
 
-  const handleCommand = async (command: string) => {
+  const handleCommand = async (commandToExecute: string) => { // Renamed command to commandToExecute
+    // Removed DEBUG logs, will add back if fix isn't complete
     if (isProcessing) return;
     setIsProcessing(true);
 
-    // --- TEMPORARY DEBUG ---
-    if (xtermRef.current) {
-      xtermRef.current.write(`\r\n[DEBUG] handleCommand received: ${command}\r\n`);
-    } else {
-      console.error("[DEBUG] xtermRef.current is NULL in handleCommand start");
-    }
-    // --- END TEMPORARY DEBUG ---
-
     try {
-      addToHistory(command);
+      addToHistory(commandToExecute); // Use the passed command
       const printer = createPrinter({
         write: writeToTerminal,
         clear: () => xtermRef.current?.clear()
       });
-
-      // --- TEMPORARY DEBUG ---
-      if (xtermRef.current) {
-        xtermRef.current.write(`[DEBUG] Printer created. Dispatching: ${command}\r\n`);
-      } else {
-        console.error("[DEBUG] xtermRef.current is NULL before dispatch");
-      }
-      // --- END TEMPORARY DEBUG ---
       
-      // Show loading for longer commands (moved after initial debug prints)
       const isLongCommand = ['deploy', 'compile', 'logs', 'simulate'].some(cmd => 
-        command.toLowerCase().startsWith(cmd)
+        commandToExecute.toLowerCase().startsWith(cmd)
       );
       if (isLongCommand) {
         await printer.loading('Processing command...', 1000);
       }
 
-      const result = await commandRouter.dispatch(command, {
+      const result = await commandRouter.dispatch(commandToExecute, { // Use the passed command
         terminal: xtermRef.current,
         printer
       });
-
-      // --- TEMPORARY DEBUG ---
-      if (xtermRef.current) {
-        xtermRef.current.write(`[DEBUG] Dispatch returned. Success: ${result.success}, Output present: ${!!result.output}, Error present: ${!!result.error}\r\n`);
-      } else {
-        console.error("[DEBUG] xtermRef.current is NULL after dispatch");
-      }
-      // --- END TEMPORARY DEBUG ---
       
       if (result.output) {
         await formatCommandOutput(result, printer);
@@ -129,116 +131,94 @@ const Terminal: React.FC<TerminalProps> = ({
         await printer.error(result.error);
       }
     } catch (error) {
-      // --- TEMPORARY DEBUG ---
-      if (xtermRef.current) {
-        xtermRef.current.write(`[DEBUG] CAUGHT ERROR: ${String(error)}\r\n`);
-      } else {
-        console.error("[DEBUG] xtermRef.current is NULL in CATCH block of handleCommand", error);
-      }
-      // --- END TEMPORARY DEBUG ---
-      const errorPrinter = createPrinter({ // Create a new printer for the catch block
+      const errorPrinter = createPrinter({
         write: writeToTerminal,
         clear: () => xtermRef.current?.clear()
       });
       await errorPrinter.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsProcessing(false);
-      // --- TEMPORARY DEBUG ---
-      if (xtermRef.current) {
-        // xtermRef.current.write(`[DEBUG] In finally block. Writing prompt.\r\n`); // This might be too noisy
-      } else {
-         console.error("[DEBUG] xtermRef.current is NULL in FINALLY block of handleCommand");
-      }
-      // --- END TEMPORARY DEBUG ---
       writePrompt();
-      setCurrentLine('');
+      setCurrentLine(''); // This will also set currentLineRef.current to '' via the wrapper
       setHistoryIndex(-1);
-      setTempCommand('');
+      setTempCommand(''); // This will also set tempCommandRef.current to ''
     }
   };
 
   const navigateHistory = (direction: 'up' | 'down') => {
-    const term = xtermRef.current
-    if (!term) return
+    const term = xtermRef.current;
+    if (!term) return;
 
-    const history = session.commandHistory
+    const history = session.commandHistory;
     
     if (direction === 'up') {
-      if (history.length === 0) return
+      if (history.length === 0) return;
       
-      // Save current command if we're at the bottom
       if (historyIndex === -1) {
-        setTempCommand(currentLine)
+        setTempCommand(currentLineRef.current); // Save from ref
       }
       
       const newIndex = historyIndex === -1 
         ? history.length - 1 
-        : Math.max(0, historyIndex - 1)
+        : Math.max(0, historyIndex - 1);
       
-      setHistoryIndex(newIndex)
-      const historicalCommand = history[newIndex]
+      setHistoryIndex(newIndex);
+      const historicalCommand = history[newIndex];
       
-      clearCurrentLine()
-      term.write(historicalCommand)
-      setCurrentLine(historicalCommand)
-    } else {
-      if (historyIndex === -1) return
+      clearCurrentLine();
+      term.write(historicalCommand);
+      setCurrentLine(historicalCommand); // Update state and ref
+    } else { // down
+      if (historyIndex === -1) return;
       
-      const newIndex = historyIndex + 1
+      const newIndex = historyIndex + 1;
       
       if (newIndex >= history.length) {
-        // Return to current command
-        setHistoryIndex(-1)
-        clearCurrentLine()
-        term.write(tempCommand)
-        setCurrentLine(tempCommand)
-        setTempCommand('')
+        setHistoryIndex(-1);
+        clearCurrentLine();
+        term.write(tempCommandRef.current); // Restore from ref
+        setCurrentLine(tempCommandRef.current); // Update state and ref
+        setTempCommand('');
       } else {
-        setHistoryIndex(newIndex)
-        const historicalCommand = history[newIndex]
+        setHistoryIndex(newIndex);
+        const historicalCommand = history[newIndex];
         
-        clearCurrentLine()
-        term.write(historicalCommand)
-        setCurrentLine(historicalCommand)
+        clearCurrentLine();
+        term.write(historicalCommand);
+        setCurrentLine(historicalCommand); // Update state and ref
       }
     }
-  }
+  };
 
   const handleKeyPress = (key: string, ev: KeyboardEvent) => {
-    console.log(`[DEBUG_KEYPRESS] handleKeyPress called. Key: "${ev.key}", Ctrl: ${ev.ctrlKey}, Alt: ${ev.altKey}, Meta: ${ev.metaKey}`);
+    // Removed previous DEBUG logs for clarity, will add back if needed
     const term = xtermRef.current;
 
-    console.log(`[DEBUG_KEYPRESS] Before guard: term exists? ${!!term}, isProcessing? ${isProcessing}`);
     if (!term || isProcessing) {
-      console.log(`[DEBUG_KEYPRESS] Guard prevented further execution. term: ${term}, isProcessing: ${isProcessing}`);
       return;
     }
 
     switch (ev.key) {
       case 'Enter':
-        console.log('[DEBUG_KEYPRESS] "Enter" key detected.');
         ev.preventDefault();
-        writeToTerminal(''); // Echo newline visually in terminal
+        writeToTerminal('');
 
-        console.log(`[DEBUG_KEYPRESS] Current line before trim: "${currentLine}"`);
-        if (currentLine.trim().length > 0) { // Only process if there's a command
-          console.log(`[DEBUG_KEYPRESS] Non-empty command: "${currentLine.trim()}". Calling handleCommand.`);
-          handleCommand(currentLine);
+        const commandToProcess = currentLineRef.current.trim();
+        if (commandToProcess.length > 0) {
+          handleCommand(currentLineRef.current); // Pass the un-trimmed version from ref
         } else {
-          console.log('[DEBUG_KEYPRESS] Empty command. Writing new prompt.');
-          // If the line is empty, just show a new prompt without processing
-          setCurrentLine('');
-          setHistoryIndex(-1);
-          setTempCommand('');
+          setCurrentLine(''); // Reset state and ref
+          setHistoryIndex(-1); // Reset history index if command is empty
+          setTempCommand('');  // Reset temp command if command is empty
           writePrompt();
         }
         break;
 
       case 'Backspace':
         ev.preventDefault();
-        if (currentLine.length > 0) {
-          setCurrentLine(prev => prev.slice(0, -1));
-          term.write('\b \b'); // Visual backspace
+        if (currentLineRef.current.length > 0) {
+          setCurrentLine(prev => prev.slice(0, -1)); // Update state and ref
+          term.write('\b \b');
         }
         break;
 
@@ -254,17 +234,18 @@ const Terminal: React.FC<TerminalProps> = ({
 
       case 'Tab':
         ev.preventDefault();
-        if (currentLine.trim()) {
-          const suggestions = commandRouter.getSuggestions(currentLine.trim());
+        const trimmedLineForTab = currentLineRef.current.trim();
+        if (trimmedLineForTab) {
+          const suggestions = commandRouter.getSuggestions(trimmedLineForTab);
           if (suggestions.length === 1) {
-            const completion = suggestions[0].substring(currentLine.length);
+            const completion = suggestions[0].substring(currentLineRef.current.length); // use currentLineRef
             term.write(completion);
-            setCurrentLine(prev => prev + completion);
+            setCurrentLine(currentLineRef.current + completion); // Update state and ref
           } else if (suggestions.length > 1) {
             writeToTerminal('');
             writeToTerminal(suggestions.join('  '));
             writePrompt();
-            term.write(currentLine);
+            term.write(currentLineRef.current); // Write content from ref
           }
         }
         break;
@@ -272,23 +253,15 @@ const Terminal: React.FC<TerminalProps> = ({
       case 'Escape':
         ev.preventDefault();
         clearCurrentLine();
-        setCurrentLine('');
+        setCurrentLine(''); // Update state and ref
         setHistoryIndex(-1);
         setTempCommand('');
         break;
 
-      // Home and End could be restored if needed, but are less critical for core functionality.
-
       default:
-        // Handle printable characters (including space, via ev.key)
         if (ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
           term.write(ev.key);
-          setCurrentLine(prev => prev + ev.key);
-          // Reset history navigation when typing (will be relevant when history is restored)
-          // if (historyIndex !== -1) {
-          //   setHistoryIndex(-1);
-          //   setTempCommand('');
-          // }
+          setCurrentLine(prev => prev + ev.key); // Update state and ref
         }
         break;
     }
