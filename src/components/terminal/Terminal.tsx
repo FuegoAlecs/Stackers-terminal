@@ -76,7 +76,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const writeToTerminal = (text: string, newLine = true) => {
     if (xtermRef.current) {
-      xtermRef.current.write(text + (newLine ? '\n' : '')); // Changed \r\n to \n
+      xtermRef.current.write(text + (newLine ? '\r\n' : '')) // Reverted to \r\n
     }
   }
 
