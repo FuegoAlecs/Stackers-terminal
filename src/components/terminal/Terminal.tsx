@@ -320,21 +320,36 @@ const Terminal: React.FC<TerminalProps> = ({
     });
 
     const showWelcome = async () => {
-      await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' });
-      await printer.print('      StACkeRS      ', { // Changed text here
-        color: 'blue', 
-        style: 'bold', // Ensured bold style
-        typing: true,
-        typingSpeed: 50
-      });
-      await printer.print('   Your Onchain CLI Experience   ', {
+      const stackersAscii = [
+        "  _________ __             __      __                     ",
+        " /   _____//  |______ ____ |  | ___/  |_  ____   ____ ___ ",
+        " \\_____  \\\\   __\\__  \\\\__  \\|  |/    \\   __\\/ __ \\ /    \\\\  \\",
+        " /        \\|  |  / __ \\_/ __ \\|  |   |  ||  | \\  ___/|   |  \\/ __ \\",
+        "/_______  /|__| (____  (____  /__|___|  /|__|  \\___  >___|  (____  /",
+        "        \\/            \\/     \\/        \\/           \\/     \\/     \\/ "
+      ];
+
+      const titlePadding = ' '.repeat(Math.floor((80 - stackersAscii[0].length) / 2)); // Assuming 80 char width for rough centering
+
+      await printer.print('🚀' + '═'.repeat(76) + '🚀', { color: 'blue', style: 'bold' });
+      for (const line of stackersAscii) {
+        await printer.print(titlePadding + line, {
+          color: 'blue',
+          style: 'bold',
+          typing: false, // Type whole banner at once or per line
+        });
+      }
+      await printer.print('🚀' + '═'.repeat(76) + '🚀', { color: 'blue', style: 'bold' });
+
+      const subtitle = "Your Onchain CLI Experience";
+      const subtitlePadding = ' '.repeat(Math.floor((80 - subtitle.length) / 2));
+      await printer.print(subtitlePadding + subtitle, {
         color: 'cyan',
-        style: 'bold', // Kept bold for subtitle
+        style: 'bold',
         typing: true,
         typingSpeed: 30
       });
-      await printer.print('🚀 ' + '═'.repeat(50) + ' 🚀', { color: 'blue', style: 'bold' });
-      await printer.print('');
+      await printer.print('', { newLine: true }); // Extra space after subtitle
       
       await printer.info(welcomeMessage, true);
       await printer.print('');

@@ -76,11 +76,11 @@ export const ICONS = {
  * Create a reusable print function for terminal output
  */
 export function createPrinter(terminal: TerminalPrinter) {
-  return {
+  const printer = {
     /**
      * Print text with formatting options
      */
-    print: async (text: string, options: PrintOptions = {}) => {
+    print: async function (text: string, options: PrintOptions = {}) {
       const {
         color,
         background,
@@ -134,8 +134,8 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Print success message
      */
-    success: async (text: string, typing = false) => {
-      await printer.print(text, { // Changed this.print to printer.print
+    success: async function (text: string, typing = false) {
+      await this.print(text, {
         color: 'green',
         icon: ICONS.success,
         typing
@@ -145,8 +145,8 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Print error message
      */
-    error: async (text: string, typing = false) => {
-      await printer.print(text, { // Changed this.print to printer.print
+    error: async function (text: string, typing = false) {
+      await this.print(text, {
         color: 'red',
         icon: ICONS.error,
         typing
@@ -156,8 +156,8 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Print warning message
      */
-    warning: async (text: string, typing = false) => {
-      await printer.print(text, { // Changed this.print to printer.print
+    warning: async function (text: string, typing = false) {
+      await this.print(text, {
         color: 'yellow',
         icon: ICONS.warning,
         typing
@@ -167,8 +167,8 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Print info message
      */
-    info: async (text: string, typing = false) => {
-      await printer.print(text, { // Changed this.print to printer.print
+    info: async function (text: string, typing = false) {
+      await this.print(text, {
         color: 'cyan',
         icon: ICONS.info,
         typing
@@ -178,57 +178,58 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Print header with styling
      */
-    header: async (text: string, typing = false) => {
-      await printer.print('', { newLine: true }) // Changed this.print to printer.print
-      await printer.print('═'.repeat(text.length + 4), { color: 'blue' }) // Changed this.print to printer.print
-      await printer.print(`  ${text}  `, {  // Changed this.print to printer.print
-        color: 'blue', 
+    header: async function (text: string, typing = false) {
+      await this.print('', { newLine: true })
+      await this.print('═'.repeat(text.length + 4), { color: 'blue' })
+      await this.print(`  ${text}  `, {
+        color: 'blue',
         style: 'bold',
         typing
       })
-      await printer.print('═'.repeat(text.length + 4), { color: 'blue' }) // Changed this.print to printer.print
-      await printer.print('', { newLine: true }) // Changed this.print to printer.print
+      await this.print('═'.repeat(text.length + 4), { color: 'blue' })
+      await this.print('', { newLine: true })
     },
 
     /**
      * Print section divider
      */
-    divider: async (text?: string) => {
+    divider: async function (text?: string) {
       if (text) {
-        await printer.print(`\n── ${text} ──`, { color: 'gray' }) // Changed this.print to printer.print
+        await this.print(`\n── ${text} ──`, { color: 'gray' })
       } else {
-        await printer.print('─'.repeat(50), { color: 'gray' }) // Changed this.print to printer.print
+        await this.print('─'.repeat(50), { color: 'gray' })
       }
     },
 
     /**
      * Print loading spinner
      */
-    loading: async (text: string, duration = 2000) => {
+    loading: async function (text: string, duration = 2000) {
       const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
       let frameIndex = 0
       
+      // `this` is not relevant for terminal.write directly
       const interval = setInterval(() => {
         const frame = frames[frameIndex % frames.length]
-        terminal.write(`\r${frame} ${text}`, false) // terminal.write is fine, not using this.print
+        terminal.write(`\r${frame} ${text}`, false)
         frameIndex++
       }, 100)
 
       await sleep(duration)
       clearInterval(interval)
-      terminal.write(`\r✅ ${text}`, true) // terminal.write is fine
+      terminal.write(`\r✅ ${text}`, true)
     },
 
     /**
      * Print progress bar
      */
-    progress: async (text: string, steps: number, currentStep: number) => {
+    progress: async function (text: string, steps: number, currentStep: number) {
       const percentage = Math.round((currentStep / steps) * 100)
       const barLength = 20
       const filledLength = Math.round((percentage / 100) * barLength)
       const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength)
       
-      await printer.print(`${text} [${bar}] ${percentage}%`, { // Changed this.print to printer.print
+      await this.print(`${text} [${bar}] ${percentage}%`, {
         color: percentage === 100 ? 'green' : 'blue',
         newLine: true
       })
@@ -237,53 +238,53 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Print code block
      */
-    code: async (code: string, language = '') => {
-      await printer.print(`\n${language ? `${language}:` : 'Code:'}`, {  // Changed this.print to printer.print
+    code: async function (codeText: string, language = '') { // Renamed 'code' param to 'codeText' to avoid conflict
+      await this.print(`\n${language ? `${language}:` : 'Code:'}`, {
         color: 'gray',
         style: 'bold'
       })
-      await printer.print('```', { color: 'gray' }) // Changed this.print to printer.print
-      await printer.print(code, {  // Changed this.print to printer.print
+      await this.print('```', { color: 'gray' })
+      await this.print(codeText, { // Use 'codeText'
         color: 'cyan',
         style: 'italic'
       })
-      await printer.print('```', { color: 'gray' }) // Changed this.print to printer.print
+      await this.print('```', { color: 'gray' })
     },
 
     /**
      * Print table
      */
-    table: async (headers: string[], rows: string[][]) => {
-      const colWidths = headers.map((header, i) => 
+    table: async function (headers: string[], rows: string[][]) {
+      const colWidths = headers.map((header, i) =>
         Math.max(header.length, ...rows.map(row => (row[i] || '').length))
       )
 
       // Header
-      const headerRow = headers.map((header, i) => 
+      const headerRow = headers.map((header, i) =>
         header.padEnd(colWidths[i])
       ).join(' │ ')
       
-      await printer.print(`┌${'─'.repeat(headerRow.length)}┐`, { color: 'blue' }) // Changed this.print to printer.print
-      await printer.print(`│ ${headerRow} │`, { color: 'blue', style: 'bold' }) // Changed this.print to printer.print
-      await printer.print(`├${'─'.repeat(headerRow.length)}┤`, { color: 'blue' }) // Changed this.print to printer.print
+      await this.print(`┌${'─'.repeat(headerRow.length)}┐`, { color: 'blue' })
+      await this.print(`│ ${headerRow} │`, { color: 'blue', style: 'bold' })
+      await this.print(`├${'─'.repeat(headerRow.length)}┤`, { color: 'blue' })
 
       // Rows
       for (const row of rows) {
-        const formattedRow = row.map((cell, i) => 
+        const formattedRow = row.map((cell, i) =>
           (cell || '').padEnd(colWidths[i])
         ).join(' │ ')
-        await printer.print(`│ ${formattedRow} │`, { color: 'white' }) // Changed this.print to printer.print
+        await this.print(`│ ${formattedRow} │`, { color: 'white' })
       }
 
-      await printer.print(`└${'─'.repeat(headerRow.length)}┘`, { color: 'blue' }) // Changed this.print to printer.print
+      await this.print(`└${'─'.repeat(headerRow.length)}┘`, { color: 'blue' })
     },
 
     /**
      * Print step in a process
      */
-    step: async (stepNumber: number, totalSteps: number, text: string, typing = false) => {
+    step: async function (stepNumber: number, totalSteps: number, text: string, typing = false) {
       const stepText = `[${stepNumber}/${totalSteps}]`
-      await printer.print(`${stepText} ${text}`, { // Changed this.print to printer.print
+      await this.print(`${stepText} ${text}`, {
         color: 'blue',
         style: 'bold',
         icon: ICONS.gear,
@@ -294,156 +295,7 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Clear terminal
      */
-    clear: () => {
-      terminal.clear() // terminal.clear is fine
-    }
-  }
-  // Store the printer object itself to be used by its methods
-  const printer = {
-    print: async (text: string, options: PrintOptions = {}) => {
-      const {
-        color,
-        background,
-        style,
-        typing = false,
-        typingSpeed = 30,
-        newLine = true,
-        prefix,
-        icon
-      } = options
-
-      let formattedText = ''
-
-      if (icon) {
-        formattedText += icon + ' '
-      }
-      if (prefix) {
-        formattedText += prefix + ' '
-      }
-      if (style) {
-        formattedText += STYLES[style]
-      }
-      if (background) {
-        formattedText += BACKGROUNDS[background]
-      }
-      if (color) {
-        formattedText += COLORS[color]
-      }
-      formattedText += text
-      if (color || background || style) {
-        formattedText += STYLES.reset
-      }
-
-      if (typing) {
-        await typeText(terminal, formattedText, typingSpeed, newLine)
-      } else {
-        terminal.write(formattedText, newLine)
-      }
-    },
-    success: async (text: string, typing = false) => {
-      await printer.print(text, {
-        color: 'green',
-        icon: ICONS.success,
-        typing
-      })
-    },
-    error: async (text: string, typing = false) => {
-      await printer.print(text, {
-        color: 'red',
-        icon: ICONS.error,
-        typing
-      })
-    },
-    warning: async (text: string, typing = false) => {
-      await printer.print(text, {
-        color: 'yellow',
-        icon: ICONS.warning,
-        typing
-      })
-    },
-    info: async (text: string, typing = false) => {
-      await printer.print(text, {
-        color: 'cyan',
-        icon: ICONS.info,
-        typing
-      })
-    },
-    header: async (text: string, typing = false) => {
-      await printer.print('', { newLine: true })
-      await printer.print('═'.repeat(text.length + 4), { color: 'blue' })
-      await printer.print(`  ${text}  `, {
-        color: 'blue',
-        style: 'bold',
-        typing
-      })
-      await printer.print('═'.repeat(text.length + 4), { color: 'blue' })
-      await printer.print('', { newLine: true })
-    },
-    divider: async (text?: string) => {
-      if (text) {
-        await printer.print(`\n── ${text} ──`, { color: 'gray' })
-      } else {
-        await printer.print('─'.repeat(50), { color: 'gray' })
-      }
-    },
-    loading: async (text: string, duration = 2000) => {
-      const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-      let frameIndex = 0
-      const interval = setInterval(() => {
-        const frame = frames[frameIndex % frames.length]
-        terminal.write(`\r${frame} ${text}`, false)
-        frameIndex++
-      }, 100)
-      await sleep(duration)
-      clearInterval(interval)
-      terminal.write(`\r✅ ${text}`, true)
-    },
-    progress: async (text: string, steps: number, currentStep: number) => {
-      const percentage = Math.round((currentStep / steps) * 100)
-      const barLength = 20
-      const filledLength = Math.round((percentage / 100) * barLength)
-      const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength)
-      await printer.print(`${text} [${bar}] ${percentage}%`, {
-        color: percentage === 100 ? 'green' : 'blue',
-        newLine: true
-      })
-    },
-    code: async (code: string, language = '') => {
-      await printer.print(`\n${language ? `${language}:` : 'Code:'}`, {
-        color: 'gray',
-        style: 'bold'
-      })
-      await printer.print('```', { color: 'gray' })
-      await printer.print(code, {
-        color: 'cyan',
-        style: 'italic'
-      })
-      await printer.print('```', { color: 'gray' })
-    },
-    table: async (headers: string[], rows: string[][]) => {
-      const colWidths = headers.map((header, i) =>
-        Math.max(header.length, ...rows.map(row => (row[i] || '').length))
-      )
-      const headerRow = headers.map((header, i) => header.padEnd(colWidths[i])).join(' │ ')
-      await printer.print(`┌${'─'.repeat(headerRow.length)}┐`, { color: 'blue' })
-      await printer.print(`│ ${headerRow} │`, { color: 'blue', style: 'bold' })
-      await printer.print(`├${'─'.repeat(headerRow.length)}┤`, { color: 'blue' })
-      for (const row of rows) {
-        const formattedRow = row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' │ ')
-        await printer.print(`│ ${formattedRow} │`, { color: 'white' })
-      }
-      await printer.print(`└${'─'.repeat(headerRow.length)}┘`, { color: 'blue' })
-    },
-    step: async (stepNumber: number, totalSteps: number, text: string, typing = false) => {
-      const stepText = `[${stepNumber}/${totalSteps}]`
-      await printer.print(`${stepText} ${text}`, {
-        color: 'blue',
-        style: 'bold',
-        icon: ICONS.gear,
-        typing
-      })
-    },
-    clear: () => {
+    clear: function () { // `this` is not relevant for terminal.clear directly
       terminal.clear()
     }
   }
