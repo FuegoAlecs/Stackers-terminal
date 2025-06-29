@@ -75,58 +75,87 @@ const Terminal: React.FC<TerminalProps> = ({
   }
 
   const handleCommand = async (command: string) => {
-    if (isProcessing) return
-    
-    setIsProcessing(true)
-    
+    if (isProcessing) return;
+    setIsProcessing(true);
+
+    // --- TEMPORARY DEBUG ---
+    if (xtermRef.current) {
+      xtermRef.current.write(`\r\n[DEBUG] handleCommand received: ${command}\r\n`);
+    } else {
+      console.error("[DEBUG] xtermRef.current is NULL in handleCommand start");
+    }
+    // --- END TEMPORARY DEBUG ---
+
     try {
-      // Add to session history
-      addToHistory(command)
-      
-      // Create printer for enhanced output
+      addToHistory(command);
       const printer = createPrinter({
         write: writeToTerminal,
         clear: () => xtermRef.current?.clear()
-      })
+      });
+
+      // --- TEMPORARY DEBUG ---
+      if (xtermRef.current) {
+        xtermRef.current.write(`[DEBUG] Printer created. Dispatching: ${command}\r\n`);
+      } else {
+        console.error("[DEBUG] xtermRef.current is NULL before dispatch");
+      }
+      // --- END TEMPORARY DEBUG ---
       
-      // Show loading for longer commands
+      // Show loading for longer commands (moved after initial debug prints)
       const isLongCommand = ['deploy', 'compile', 'logs', 'simulate'].some(cmd => 
         command.toLowerCase().startsWith(cmd)
-      )
-      
+      );
       if (isLongCommand) {
-        await printer.loading('Processing command...', 1000)
+        await printer.loading('Processing command...', 1000);
       }
-      
-      // Execute command using the router (which handles history and aliases)
+
       const result = await commandRouter.dispatch(command, {
         terminal: xtermRef.current,
         printer
-      })
+      });
+
+      // --- TEMPORARY DEBUG ---
+      if (xtermRef.current) {
+        xtermRef.current.write(`[DEBUG] Dispatch returned. Success: ${result.success}, Output present: ${!!result.output}, Error present: ${!!result.error}\r\n`);
+      } else {
+        console.error("[DEBUG] xtermRef.current is NULL after dispatch");
+      }
+      // --- END TEMPORARY DEBUG ---
       
       if (result.output) {
-        // Use enhanced formatting for command output
-        await formatCommandOutput(result, printer)
+        await formatCommandOutput(result, printer);
       }
-      
       if (!result.success && result.error) {
-        await printer.error(result.error)
+        await printer.error(result.error);
       }
     } catch (error) {
-      const printer = createPrinter({
+      // --- TEMPORARY DEBUG ---
+      if (xtermRef.current) {
+        xtermRef.current.write(`[DEBUG] CAUGHT ERROR: ${String(error)}\r\n`);
+      } else {
+        console.error("[DEBUG] xtermRef.current is NULL in CATCH block of handleCommand", error);
+      }
+      // --- END TEMPORARY DEBUG ---
+      const errorPrinter = createPrinter({ // Create a new printer for the catch block
         write: writeToTerminal,
         clear: () => xtermRef.current?.clear()
-      })
-      await printer.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      });
+      await errorPrinter.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      setIsProcessing(false)
-      // Show new prompt
-      writePrompt()
-      setCurrentLine('')
-      setHistoryIndex(-1)
-      setTempCommand('')
+      setIsProcessing(false);
+      // --- TEMPORARY DEBUG ---
+      if (xtermRef.current) {
+        // xtermRef.current.write(`[DEBUG] In finally block. Writing prompt.\r\n`); // This might be too noisy
+      } else {
+         console.error("[DEBUG] xtermRef.current is NULL in FINALLY block of handleCommand");
+      }
+      // --- END TEMPORARY DEBUG ---
+      writePrompt();
+      setCurrentLine('');
+      setHistoryIndex(-1);
+      setTempCommand('');
     }
-  }
+  };
 
   const navigateHistory = (direction: 'up' | 'down') => {
     const term = xtermRef.current
@@ -320,7 +349,7 @@ const Terminal: React.FC<TerminalProps> = ({
     });
 
     const showWelcome = async () => {
-      const stackersAscii = [
+      const stackersAscii = [ // Restored variable name and content
         "  _________ __             __      __                     ",
         " /   _____//  |______ ____ |  | ___/  |_  ____   ____ ___ ",
         " \\_____  \\\\   __\\__  \\\\__  \\|  |/    \\   __\\/ __ \\ /    \\\\  \\",
@@ -329,27 +358,41 @@ const Terminal: React.FC<TerminalProps> = ({
         "        \\/            \\/     \\/        \\/           \\/     \\/     \\/ "
       ];
 
-      const titlePadding = ' '.repeat(Math.floor((80 - stackersAscii[0].length) / 2)); // Assuming 80 char width for rough centering
+      // Original padding and border logic for the wider ASCII art
+      const titlePadding = ' '.repeat(Math.max(0, Math.floor((80 - stackersAscii[0].length) / 2)));
+      // The original border was a fixed width, or dynamically calculated. Let's assume it was 76 for the '═' part.
+      // Or, more robustly, based on the art itself: stackersAscii[0].length.
+      // The previous commit used '═'.repeat(76) which is 76 chars + 2 rockets = 78 total.
+      // The previous ASCII art line is 66 chars. (80-66)/2 = 7 padding. 7+66+7 = 80.
+      // A border of 76 for '═' seems appropriate if the art itself is padded to be around that.
+      // Let's use a dynamic approach based on the restored art's actual width for precision.
+      const originalBorderLength = stackersAscii[0].length + 0; // Border should match the art width directly if padding is outside
+                                                              // Or, if padding is inside the border print:
+                                                              // '🚀' + padding + art + padding + '🚀'
+                                                              // The previous version was: printer.print('🚀' + '═'.repeat(76) + '🚀', ...);
+                                                              // This implies the content inside was expected to be less than 76.
+                                                              // The ASCII art itself is 66 chars.
+                                                              // Let's stick to the previous '═'.repeat(76) for the horizontal rule.
 
       await printer.print('🚀' + '═'.repeat(76) + '🚀', { color: 'blue', style: 'bold' });
       for (const line of stackersAscii) {
-        await printer.print(titlePadding + line, {
+        await printer.print(titlePadding + line, { // Using titlePadding here
           color: 'blue',
           style: 'bold',
-          typing: false, // Type whole banner at once or per line
+          typing: false,
         });
       }
       await printer.print('🚀' + '═'.repeat(76) + '🚀', { color: 'blue', style: 'bold' });
 
       const subtitle = "Your Onchain CLI Experience";
-      const subtitlePadding = ' '.repeat(Math.floor((80 - subtitle.length) / 2));
+      const subtitlePadding = ' '.repeat(Math.max(0, Math.floor((80 - subtitle.length) / 2)));
       await printer.print(subtitlePadding + subtitle, {
         color: 'cyan',
         style: 'bold',
         typing: true,
         typingSpeed: 30
       });
-      await printer.print('', { newLine: true }); // Extra space after subtitle
+      await printer.print('', { newLine: true });
       
       await printer.info(welcomeMessage, true);
       await printer.print('');
