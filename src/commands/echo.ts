@@ -9,12 +9,21 @@ export const echoCommand: CommandHandler = {
   execute: (context: CommandContext): CommandResult => {
     const { args } = context
     
+    if (args.length > 0 && args[0] === '--multiline-test') {
+      return {
+        output: "This is line one.\n  This is line two (indented).\n    This is line three (more indented).\nAnd this is line four.",
+        success: true
+      }
+    }
+
     if (args.length === 0) {
       return { output: '', success: true }
     }
     
+    // Original echo behavior: join args, but replace literal \\n with actual \n for testing
+    const outputString = args.join(' ').replace(/\\n/g, '\n');
     return {
-      output: args.join(' '),
+      output: outputString,
       success: true
     }
   }
