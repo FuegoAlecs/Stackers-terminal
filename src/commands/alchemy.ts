@@ -132,7 +132,7 @@ Status: ${transaction.blockNumber ? 'Confirmed' : 'Pending'}`,
             success: true
           }
         
-        case 'nfts':
+        case 'nfts': { // Added block scope
           if (args.length < 2) {
             return {
               output: 'Usage: alchemy nfts <address>\nExample: alchemy nfts 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b',
@@ -161,8 +161,9 @@ Status: ${transaction.blockNumber ? 'Confirmed' : 'Pending'}`,
             await printer.print(`\n... and ${nfts.totalCount - 10} more. Increase limit in code if needed.`);
           }
           return { output: '', success: true };
+        } // Closed block scope for nfts
         
-        case 'tokens':
+        case 'tokens': { // Added block scope
           if (args.length < 2) {
             return {
               output: 'Usage: alchemy tokens <address>\nExample: alchemy tokens 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b',
@@ -201,8 +202,9 @@ Status: ${transaction.blockNumber ? 'Confirmed' : 'Pending'}`,
           }
           await printer.print(`\nNote: Showing raw integer balances. Use token-specific decimals for accurate display.`);
           return { output: '', success: true };
+        } // Closed block scope for tokens
         
-        case 'history':
+        case 'history': { // Added block scope
           if (args.length < 2) {
             return {
               output: 'Usage: alchemy history <address>\nExample: alchemy history 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b',
@@ -236,6 +238,7 @@ Status: ${transaction.blockNumber ? 'Confirmed' : 'Pending'}`,
             await printer.print(`\n... and ${historyResult.transfers.length - 10} more transactions.`);
           }
           return { output: '', success: true };
+        } // Closed block scope for history
         
         default:
           return {
