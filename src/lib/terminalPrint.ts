@@ -9,9 +9,23 @@ export interface PrintOptions {
   icon?: string
 }
 
+import Table from 'cli-table3';
+
+export interface PrintOptions {
+  color?: 'red' | 'green' | 'blue' | 'yellow' | 'purple' | 'cyan' | 'white' | 'gray'
+  background?: 'red' | 'green' | 'blue' | 'yellow' | 'purple' | 'cyan' | 'black'
+  style?: 'bold' | 'dim' | 'italic' | 'underline'
+  typing?: boolean
+  typingSpeed?: number
+  newLine?: boolean
+  prefix?: string
+  icon?: string
+}
+
 export interface TerminalPrinter {
   write: (text: string, newLine?: boolean) => void
   clear: () => void
+  getDimensions: () => { cols: number; rows: number } // Added to get terminal dimensions
 }
 
 // ANSI color codes for xterm.js
@@ -75,7 +89,7 @@ export const ICONS = {
 /**
  * Create a reusable print function for terminal output
  */
-export function createPrinter(terminal: TerminalPrinter) {
+export function createPrinter(terminal: TerminalPrinter) { // terminal: TerminalPrinter (includes getDimensions)
   const printer = {
     /**
      * Print text with formatting options
@@ -254,29 +268,84 @@ export function createPrinter(terminal: TerminalPrinter) {
     /**
      * Print table
      */
-    table: async function (headers: string[], rows: string[][]) {
-      const colWidths = headers.map((header, i) =>
-        Math.max(header.length, ...rows.map(row => (row[i] || '').length))
-      )
+    table: async function (headers: string[], rows: string[][], tableOptions: Table.TableConstructorOptions = {}) {
+      const { cols } = terminal.getDimensions();
+      // Ensure headers and rows are arrays of strings, convert if necessary (e.g. null/undefined to '')
+      const sanitizedHeaders = headers.map(h => String(h ?? ''));
+      const sanitizedRows = rows.map(row => row.map(cell => String(cell ?? '')));
 
-      // Header
-      const headerRow = headers.map((header, i) =>
-        header.padEnd(colWidths[i])
-      ).join(' │ ')
+      const cliTable = new Table({
+        head: sanitizedHeaders,
+        colAligns: sanitizedHeaders.map(() => 'left'), // Default to left alignment
+        wordWrap: true,
+        wrapOnWordBoundary: true, // Changed to true for better readability
+        ...tableOptions, // Allow overriding default options
+        // Attempt to set reasonable column widths based on terminal size
+        // This is a basic approach; more sophisticated logic might be needed
+        colWidths: tableOptions.colWidths || this.calculateColWidths(sanitizedHeaders, sanitizedRows, cols),
+        style: {
+          head: ['blue', 'bold'], // Apply some default styling
+          border: ['blue'],
+          compact: false, // Use compact for less padding if needed, true by default with cli-table3
+          ...tableOptions.style,
+        },
+      });
+
+      cliTable.push(...sanitizedRows);
+      const tableString = cliTable.toString();
       
-      await this.print(`┌${'─'.repeat(headerRow.length)}┐`, { color: 'blue' })
-      await this.print(`│ ${headerRow} │`, { color: 'blue', style: 'bold' })
-      await this.print(`├${'─'.repeat(headerRow.length)}┤`, { color: 'blue' })
+      // cli-table3 output includes newlines, so print each line separately without adding extra newlines
+      // or ensure the print function handles multi-line strings correctly.
+      // The current print function adds \r\n if newLine is true (default).
+      // We can split the table string and print each line.
+      tableString.split('\n').forEach(line => {
+        // We need to use terminal.write directly here or a version of this.print that doesn't add extra \r\n
+        // For now, let's assume this.print handles it if newLine is false for subsequent lines.
+        // However, cli-table3's output is already formatted with newlines.
+        terminal.write(line, true); // Write line by line, ensuring each gets its own line.
+      });
+      // Add a final blank line for spacing after the table if desired
+      // await this.print('', { newLine: true });
+    },
 
-      // Rows
-      for (const row of rows) {
-        const formattedRow = row.map((cell, i) =>
-          (cell || '').padEnd(colWidths[i])
-        ).join(' │ ')
-        await this.print(`│ ${formattedRow} │`, { color: 'white' })
+    /**
+     * Calculate column widths trying to fit into terminal width.
+     * This is a helper that might need further refinement.
+     */
+    calculateColWidths: function(headers: string[], rows: string[][], termWidth: number): (number | null)[] {
+      const numColumns = headers.length;
+      if (numColumns === 0) return [];
+
+      const minContentWidths = headers.map((header, i) =>
+        Math.max(
+          (header || '').length,
+          ...rows.map(row => (row[i] || '').length)
+        )
+      );
+
+      const totalMinContentWidth = minContentWidths.reduce((sum, w) => sum + w, 0);
+      const borderAndPadding = (numColumns * 3) + 1; // Approximate space for borders/padding per column
+
+      if (totalMinContentWidth + borderAndPadding <= termWidth) {
+        // If everything fits, use content widths, but allow cli-table3 to manage if some are small
+        return minContentWidths.map(w => Math.max(w, 5)); // Ensure a minimum width
       }
 
-      await this.print(`└${'─'.repeat(headerRow.length)}┘`, { color: 'blue' })
+      // Attempt to distribute widths, prioritizing columns with more content
+      // This is a naive distribution. cli-table3's own wrapping might be better.
+      // We can also return nulls to let cli-table3 decide automatically based on `wordWrap`.
+      // For now, let cli-table3 handle it if it overflows.
+      // Returning null for colWidths tells cli-table3 to auto-size.
+      // However, we can provide initial hints based on content.
+
+      // If we want to force fit, we'd need more complex logic.
+      // For now, let's provide the minContentWidths and let cli-table3 wrap.
+      // If termWidth is very small, even this might not be enough.
+      // A more robust solution is to let cli-table3 do its thing with wordWrap=true
+      // and only specify colWidths if you have specific requirements.
+      // Let's try returning null to let cli-table3 do the heavy lifting with wordWrap.
+      // This is generally better than trying to micromanage it here without full context.
+      return headers.map(() => null); // Let cli-table3 auto-calculate based on content and wordWrap
     },
 
     /**
@@ -305,17 +374,49 @@ export function createPrinter(terminal: TerminalPrinter) {
     printHelpTable: async function (
       rows: HelpTableRow[],
       commandHeader?: string,
-      descriptionHeader?: string,
-      usageHeader?: string, // Added to match formatHelpTable
-      options: PrintOptions = {} // Allow passing through other print options
+      commandHeader = 'COMMAND',
+      descriptionHeader = 'DESCRIPTION',
+      usageHeader = 'USAGE', // Retained for clarity, maps to a header name
+      tableOptions: Table.TableConstructorOptions = {} // Allow passing cli-table3 options
     ) {
-      const formattedString = formatHelpTable(rows, commandHeader, descriptionHeader, usageHeader);
-      // Ensure tables are not typed out char by char, and handle potential empty string from formatHelpTable
-      if (formattedString && formattedString !== 'No commands to display.') {
-        await this.print(formattedString, { ...options, typing: false });
-      } else {
-        await this.print(formattedString, { ...options }); // Print "No commands..." normally
+      if (!rows || rows.length === 0) {
+        await this.print('No commands to display.');
+        return;
       }
+
+      // Determine if 'usage' is present and should be displayed as a separate column or combined.
+      // For simplicity with cli-table3, we can have distinct columns.
+      const hasUsage = rows.some(row => typeof row.usage === 'string' && row.usage.length > 0);
+
+      const headers = hasUsage
+        ? [commandHeader, usageHeader, descriptionHeader]
+        : [commandHeader, descriptionHeader];
+
+      const tableRows = rows.map(row => {
+        return hasUsage
+          ? [row.command, row.usage || '', row.description]
+          : [row.command, row.description];
+      });
+
+      // Default options for help table to make it compact and clean
+      const defaultHelpTableOptions: Table.TableConstructorOptions = {
+        chars: { 'top': '' , 'top-mid': '' , 'top-left': '' , 'top-right': ''
+               , 'bottom': '' , 'bottom-mid': '' , 'bottom-left': '' , 'bottom-right': ''
+               , 'left': ' ' , 'left-mid': '' , 'mid': '' , 'mid-mid': ''
+               , 'right': '' , 'right-mid': '' , 'middle': ' ' },
+        style: {
+          head: ['bold'], // Keep headers bold, no specific color by default here
+          border: [], // No borders by default for help
+          compact: true,
+          'padding-left': 0,
+          'padding-right': 2 // Add some padding between columns
+        },
+        // Let cli-table3 handle colWidths automatically for help tables, it's usually good for this.
+        // colWidths: [null, null, null] or [null, null] based on hasUsage
+        ...tableOptions // User can override these defaults
+      };
+
+      await this.table(headers, tableRows, defaultHelpTableOptions);
     }
   }
   return printer
@@ -354,6 +455,8 @@ export function formatCommandOutput(
   printer: ReturnType<typeof createPrinter>
 ) {
   if (result.success) {
+    // If the output is intended to be a table, it should have been handled by the command itself
+    // using printer.table(). This function is for general output.
     return printer.print(result.output, { color: 'white' })
   } else {
     return printer.error(result.error || result.output)
@@ -400,47 +503,4 @@ export interface HelpTableRow {
   usage?: string; // Optional, can be combined with command or shown separately
 }
 
-/**
- * Formats an array of command objects into a fixed-width, table-like string.
- */
-export function formatHelpTable(
-  rows: HelpTableRow[],
-  commandHeader = 'COMMAND',
-  descriptionHeader = 'DESCRIPTION',
-  usageHeader = 'USAGE' // Kept for flexibility, though might combine command & usage
-): string {
-  if (!rows || rows.length === 0) {
-    return 'No commands to display.';
-  }
-
-  // Determine column for command name (or usage string if preferred)
-  // For this version, we'll display command name and usage in the first column if usage is short,
-  // or just command name if usage is long or not present.
-  // A more sophisticated version might have three columns or handle this differently.
-
-  const firstColumnData = rows.map(row => row.usage || row.command);
-  const firstColumnHeader = rows.some(r => r.usage) ? usageHeader : commandHeader;
-
-  const minFirstColWidth = firstColumnHeader.length;
-  const maxFirstColWidth = Math.max(
-    minFirstColWidth,
-    ...firstColumnData.map(cmdOrUsage => cmdOrUsage.length)
-  );
-
-  const columnGap = ' | '; // Defines the visual separator and its spacing
-
-  let output = '';
-
-  // Header
-  output += firstColumnHeader.padEnd(maxFirstColWidth) + columnGap + descriptionHeader + '\n';
-  output += '-'.repeat(maxFirstColWidth) + columnGap.replace(/ /g, '-') + '-'.repeat(descriptionHeader.length) + '\n';
-
-  // Rows
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const firstColEntry = firstColumnData[i];
-    output += firstColEntry.padEnd(maxFirstColWidth) + columnGap + row.description + '\n';
-  }
-
-  return output;
-}
+// formatHelpTable function is removed as printHelpTable now uses printer.table directly.

@@ -109,7 +109,11 @@ const Terminal: React.FC<TerminalProps> = ({
       addToHistory(commandToExecute); // Use the passed command
       const printer = createPrinter({
         write: writeToTerminal,
-        clear: () => xtermRef.current?.clear()
+        clear: () => xtermRef.current?.clear(),
+        getDimensions: () => ({
+          cols: xtermRef.current?.cols || 80,
+          rows: xtermRef.current?.rows || 24
+        })
       });
       
       const isLongCommand = ['deploy', 'compile', 'logs', 'simulate'].some(cmd => 
@@ -133,7 +137,11 @@ const Terminal: React.FC<TerminalProps> = ({
     } catch (error) {
       const errorPrinter = createPrinter({
         write: writeToTerminal,
-        clear: () => xtermRef.current?.clear()
+        clear: () => xtermRef.current?.clear(),
+        getDimensions: () => ({
+          cols: xtermRef.current?.cols || 80,
+          rows: xtermRef.current?.rows || 24
+        })
       });
       await errorPrinter.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -356,7 +364,11 @@ const Terminal: React.FC<TerminalProps> = ({
     // Enhanced welcome message with colors
     const printer = createPrinter({
       write: writeToTerminal,
-      clear: () => { if(xtermRef.current) xtermRef.current.clear(); }
+      clear: () => { if(xtermRef.current) xtermRef.current.clear(); },
+      getDimensions: () => ({
+        cols: xtermRef.current?.cols || 80,
+        rows: xtermRef.current?.rows || 24
+      })
     });
 
     const showWelcome = async () => {
