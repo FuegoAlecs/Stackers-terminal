@@ -9,7 +9,11 @@ export const alchemyCommand: CommandHandler = {
   aliases: ['al'],
   
   execute: async (context: CommandContext): Promise<CommandResult> => {
-    const { args } = context
+    const { args, printer } = context; // Added printer
+
+    if (!printer) {
+      return { output: 'Error: Printer not available.', success: false };
+    }
     
     if (args.length === 0) {
       return {
@@ -136,29 +140,27 @@ Status: ${transaction.blockNumber ? 'Confirmed' : 'Pending'}`,
             }
           }
           
-          const nftAddress = args[1]
-          const nfts = await alchemyUtils.getNFTs(nftAddress)
+          const nftAddress = args[1];
+          const nfts = await alchemyUtils.getNFTs(nftAddress);
           
           if (nfts.ownedNfts.length === 0) {
-            return {
-              output: `No NFTs found for address: ${nftAddress}`,
-              success: true
-            }
+            await printer.print(`No NFTs found for address: ${nftAddress}`);
+            return { output: '', success: true };
           }
           
-          const nftList = nfts.ownedNfts.slice(0, 5).map((nft, index) => 
-            `${index + 1}. ${nft.title || 'Untitled'} (${nft.contract.address})`
-          ).join('\n')
-          
-          return {
-            output: `NFTs owned by ${nftAddress}:
-Total: ${nfts.totalCount}
-Showing first 5:
-${nftList}
+          await printer.print(`NFTs owned by ${nftAddress} (Total: ${nfts.totalCount}):`);
+          const headers = ['#', 'Title', 'Contract Address'];
+          const rows = nfts.ownedNfts.slice(0, 10).map((nft, index) => [ // Show up to 10
+            (index + 1).toString(),
+            nft.name || nft.title || 'Untitled', // Prefer name, then title
+            nft.contract.address
+          ]);
+          await printer.table(headers, rows);
 
-${nfts.totalCount > 5 ? `... and ${nfts.totalCount - 5} more` : ''}`,
-            success: true
+          if (nfts.totalCount > 10) {
+            await printer.print(`\n... and ${nfts.totalCount - 10} more. Increase limit in code if needed.`);
           }
+          return { output: '', success: true };
         
         case 'tokens':
           if (args.length < 2) {
@@ -168,32 +170,37 @@ ${nfts.totalCount > 5 ? `... and ${nfts.totalCount - 5} more` : ''}`,
             }
           }
           
-          const tokenAddress = args[1]
-          const tokens = await alchemyUtils.getTokenBalances(tokenAddress)
+          const tokenAddress = args[1];
+          const tokenBalancesResult = await alchemyUtils.getTokenBalances(tokenAddress); // Renamed variable
           
-          const nonZeroTokens = tokens.tokenBalances.filter(token => 
-            token.tokenBalance && token.tokenBalance !== '0x0'
-          )
+          const nonZeroTokens = tokenBalancesResult.tokenBalances.filter(token =>
+            token.tokenBalance && token.tokenBalance !== '0x0' && token.tokenBalance !== '0' // Added '0' check
+          );
           
           if (nonZeroTokens.length === 0) {
-            return {
-              output: `No token balances found for address: ${tokenAddress}`,
-              success: true
-            }
+            await printer.print(`No token balances found for address: ${tokenAddress}`);
+            return { output: '', success: true };
           }
           
-          const tokenList = nonZeroTokens.slice(0, 10).map((token, index) => {
-            const balance = parseInt(token.tokenBalance || '0', 16)
-            return `${index + 1}. ${token.contractAddress}: ${balance}`
-          }).join('\n')
+          await printer.print(`Token Balances for ${tokenAddress}:`);
+          // Consider adding token symbols or names if available and decimals for formatted balance
+          const headers = ['#', 'Contract Address', 'Raw Balance'];
+          const rows = nonZeroTokens.slice(0, 15).map((token, index) => { // Show up to 15
+            // Assuming balance is hex. If it can be decimal string, adjust parsing.
+            const balance = BigInt(token.tokenBalance || '0').toString(); // Keep as full number string
+            return [
+              (index + 1).toString(),
+              token.contractAddress,
+              balance
+            ];
+          });
+          await printer.table(headers, rows);
           
-          return {
-            output: `Token Balances for ${tokenAddress}:
-${tokenList}
-
-Note: Showing raw balances. Use token-specific decimals for accurate amounts.`,
-            success: true
+          if (nonZeroTokens.length > 15) {
+            await printer.print(`\n... and ${nonZeroTokens.length - 15} more tokens.`);
           }
+          await printer.print(`\nNote: Showing raw integer balances. Use token-specific decimals for accurate display.`);
+          return { output: '', success: true };
         
         case 'history':
           if (args.length < 2) {
@@ -203,28 +210,32 @@ Note: Showing raw balances. Use token-specific decimals for accurate amounts.`,
             }
           }
           
-          const historyAddress = args[1]
-          const history = await alchemyUtils.getTransactionHistory(historyAddress)
+          const historyAddress = args[1];
+          const historyResult = await alchemyUtils.getTransactionHistory(historyAddress); // Renamed
           
-          if (history.transfers.length === 0) {
-            return {
-              output: `No transaction history found for address: ${historyAddress}`,
-              success: true
-            }
+          if (historyResult.transfers.length === 0) {
+            await printer.print(`No transaction history found for address: ${historyAddress}`);
+            return { output: '', success: true };
           }
           
-          const recentTxs = history.transfers.slice(0, 5).map((tx, index) => {
-            const value = tx.value ? `${parseFloat(tx.value.toString())} ${tx.asset}` : 'N/A'
-            return `${index + 1}. ${tx.hash?.slice(0, 10)}... | ${value} | Block: ${tx.blockNum}`
-          }).join('\n')
-          
-          return {
-            output: `Recent Transactions for ${historyAddress}:
-${recentTxs}
+          await printer.print(`Recent Transactions for ${historyAddress} (Total found: ${historyResult.transfers.length}):`);
+          const headers = ['#', 'Hash', 'Value', 'Asset', 'Block'];
+          const rows = historyResult.transfers.slice(0, 10).map((tx, index) => { // show up to 10
+            const valueDisplay = tx.value ? parseFloat(tx.value.toString()).toLocaleString() : 'N/A';
+            return [
+              (index + 1).toString(),
+              `${tx.hash?.slice(0, 10)}...${tx.hash?.slice(-4) || ''}`,
+              valueDisplay,
+              tx.asset || 'N/A',
+              tx.blockNum?.toString() || 'N/A'
+            ];
+          });
+          await printer.table(headers, rows);
 
-Total found: ${history.transfers.length}`,
-            success: true
+          if (historyResult.transfers.length > 10) {
+            await printer.print(`\n... and ${historyResult.transfers.length - 10} more transactions.`);
           }
+          return { output: '', success: true };
         
         default:
           return {

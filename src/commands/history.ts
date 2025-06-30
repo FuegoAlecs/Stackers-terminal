@@ -8,53 +8,49 @@ export const historyCommand: CommandHandler = {
   usage: 'history [count|clear|search <text>|export|import]',
   aliases: ['hist'],
   
-  execute: (context: CommandContext): CommandResult => {
-    const { args } = context
+  execute: async (context: CommandContext): Promise<CommandResult> => { // Changed to async
+    const { args, printer } = context; // Added printer
+
+    if (!printer) {
+      return { output: 'Error: Printer not available.', success: false };
+    }
     
     if (args.length === 0) {
       // Show last 20 commands by default
-      const recentHistory = commandHistory.getRecent(20)
+      const recentHistory = commandHistory.getRecent(20);
       
       if (recentHistory.length === 0) {
-        return {
-          output: `No command history available.
-
+        await printer.print(`No command history available.\n
 💡 Command History Features:
   • history [count] - Show last N commands
   • !! - Repeat last command
   • !<number> - Repeat command by index
   • !<text> - Repeat last command starting with text
   • history clear - Clear all history
-  • history search <text> - Search command history`,
-          success: true
-        }
+  • history search <text> - Search command history`);
+        return { output: '', success: true };
       }
       
-      const totalCommands = commandHistory.size()
-      const startIndex = Math.max(1, totalCommands - recentHistory.length + 1)
+      const totalCommands = commandHistory.size();
+      const startIndex = Math.max(1, totalCommands - recentHistory.length + 1);
       
-      const output = recentHistory
-        .map((cmd, index) => {
-          const lineNumber = (startIndex + index).toString().padStart(4)
-          return `${lineNumber}  ${cmd}`
-        })
-        .join('\n')
+      await printer.print(`Command History (showing last ${recentHistory.length} of ${totalCommands} commands):`);
+      const headers = ['#', 'Command'];
+      const rows = recentHistory.map((cmd, index) => [
+        (startIndex + index).toString(),
+        cmd
+      ]);
+      await printer.table(headers, rows);
       
-      return {
-        output: `Command History (showing last ${recentHistory.length} of ${totalCommands} commands):
-
-${output}
-
-💡 Quick Commands:
+      await printer.print(`\n💡 Quick Commands:
   !!        - Repeat last command
   !${totalCommands}       - Repeat command #${totalCommands}
   !wallet   - Repeat last command starting with "wallet"
-  history 50 - Show last 50 commands`,
-        success: true
-      }
+  history 50 - Show last 50 commands`);
+      return { output: '', success: true };
     }
     
-    const subcommand = args[0].toLowerCase()
+    const subcommand = args[0].toLowerCase();
     
     switch (subcommand) {
       case 'clear':
@@ -77,33 +73,28 @@ Examples:
           }
         }
         
-        const searchText = args.slice(1).join(' ')
-        const results = commandHistory.search(searchText)
+        const searchText = args.slice(1).join(' ');
+        const results = commandHistory.search(searchText);
         
         if (results.length === 0) {
-          return {
-            output: `No commands found containing: "${searchText}"
-
+          await printer.print(`No commands found containing: "${searchText}"\n
 💡 Try:
   • Different search terms
   • Partial command names
-  • history - to see all recent commands`,
-            success: true
-          }
+  • history - to see all recent commands`);
+          return { output: '', success: true };
         }
         
-        const searchOutput = results
-          .map(result => `${result.index.toString().padStart(4)}  ${result.command}`)
-          .join('\n')
+        await printer.print(`Search results for "${searchText}" (${results.length} found):`);
+        const headers = ['#', 'Command'];
+        const rows = results.map(result => [
+          result.index.toString(),
+          result.command
+        ]);
+        await printer.table(headers, rows);
         
-        return {
-          output: `Search results for "${searchText}" (${results.length} found):
-
-${searchOutput}
-
-💡 Use !<number> to repeat any of these commands`,
-          success: true
-        }
+        await printer.print(`\n💡 Use !<number> to repeat any of these commands`);
+        return { output: '', success: true };
       
       case 'export':
         const exportData = commandHistory.export()
@@ -227,23 +218,18 @@ KEYBOARD SHORTCUTS:
           }
           
           const totalCommands = commandHistory.size()
-          const startIndex = Math.max(1, totalCommands - recentHistory.length + 1)
+          const startIndex = Math.max(1, totalCommands - recentHistory.length + 1);
           
-          const output = recentHistory
-            .map((cmd, index) => {
-              const lineNumber = (startIndex + index).toString().padStart(4)
-              return `${lineNumber}  ${cmd}`
-            })
-            .join('\n')
-          
-          return {
-            output: `Command History (last ${recentHistory.length} commands):
+          await printer.print(`Command History (last ${recentHistory.length} commands):`);
+          const headers = ['#', 'Command'];
+          const rows = recentHistory.map((cmd, index) => [
+            (startIndex + index).toString(),
+            cmd
+          ]);
+          await printer.table(headers, rows);
 
-${output}
-
-Total commands in history: ${totalCommands}`,
-            success: true
-          }
+          await printer.print(`\nTotal commands in history: ${totalCommands}`);
+          return { output: '', success: true };
         }
         
         return {

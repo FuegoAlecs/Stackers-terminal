@@ -7,17 +7,20 @@ export const aliasCommand: CommandHandler = {
   description: 'Create and manage command aliases',
   usage: 'alias [name] [command] | alias list | alias clear',
   
-  execute: (context: CommandContext): CommandResult => {
-    const { args } = context
+  execute: async (context: CommandContext): Promise<CommandResult> => { // Changed to async
+    const { args, printer } = context; // Added printer
+
+    if (!printer) {
+      return { output: 'Error: Printer not available.', success: false };
+    }
     
     if (args.length === 0) {
       // Show all aliases
-      const aliases = aliasManager.getAll()
+      const allAliases = aliasManager.getAll(); // Renamed to avoid conflict
       
-      if (aliases.length === 0) {
-        return {
-          output: `No aliases defined.
-
+      if (allAliases.length === 0) {
+        // Using printer.print for multi-line informational message
+        await printer.print(`No aliases defined.\n
 💡 Alias Commands:
   alias <name> <command>  - Create an alias
   alias list              - List all aliases
@@ -29,65 +32,45 @@ export const aliasCommand: CommandHandler = {
 Examples:
   alias greet call 0xABC.greet()
   alias bal wallet balance
-  alias deploy-hello deploy Hello.sol --gasless`,
-          success: true
-        }
+  alias deploy-hello deploy Hello.sol --gasless`);
+        return { output: '', success: true };
       }
       
-      const maxNameLength = Math.max(...aliases.map(a => a.name.length), 10)
-      const aliasList = aliases
+      await printer.print(`Current Aliases (${allAliases.length}):`);
+      const headers = ['Name', 'Command'];
+      const rows = allAliases
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map(alias => {
-          const name = alias.name.padEnd(maxNameLength + 2)
-          return `  ${name} → ${alias.command}`
-        })
-        .join('\n')
+        .map(alias => [alias.name, alias.command]);
+      await printer.table(headers, rows);
       
-      return {
-        output: `Current Aliases (${aliases.length}):
-
-${aliasList}
-
-💡 Use "alias <name> <command>" to create new aliases
-   Use "unalias <name>" to remove aliases`,
-        success: true
-      }
+      await printer.print(`\n💡 Use "alias <name> <command>" to create new aliases`);
+      await printer.print(`   Use "unalias <name>" to remove aliases`);
+      return { output: '', success: true };
     }
     
-    const subcommand = args[0].toLowerCase()
+    const subcommand = args[0].toLowerCase();
     
     switch (subcommand) {
       case 'list':
-        const aliases = aliasManager.getAll()
+        const listAliases = aliasManager.getAll(); // Renamed to avoid conflict
         
-        if (aliases.length === 0) {
-          return {
-            output: 'No aliases defined.',
-            success: true
-          }
+        if (listAliases.length === 0) {
+          await printer.print('No aliases defined.');
+          return { output: '', success: true };
         }
         
-        const maxNameLength = Math.max(...aliases.map(a => a.name.length), 10)
-        const aliasList = aliases
+        await printer.print(`All Aliases (${listAliases.length}/${aliasManager.size()}):`);
+        const listHeaders = ['#', 'Name', 'Command'];
+        const listRows = listAliases
           .sort((a, b) => a.name.localeCompare(b.name))
-          .map((alias, index) => {
-            const name = alias.name.padEnd(maxNameLength + 2)
-            const number = (index + 1).toString().padStart(3)
-            return `${number}. ${name} → ${alias.command}`
-          })
-          .join('\n')
+          .map((alias, index) => [(index + 1).toString(), alias.name, alias.command]);
+        await printer.table(listHeaders, listRows);
         
-        return {
-          output: `All Aliases (${aliases.length}/${aliasManager.size()}):
-
-${aliasList}
-
-💡 Tips:
+        await printer.print(`\n💡 Tips:
   • Use aliases to create shortcuts for complex commands
   • Aliases persist across terminal sessions
-  • Use "alias search <text>" to find specific aliases`,
-          success: true
-        }
+  • Use "alias search <text>" to find specific aliases`);
+        return { output: '', success: true };
       
       case 'search':
         if (args.length < 2) {
@@ -102,38 +85,26 @@ Examples:
           }
         }
         
-        const searchText = args.slice(1).join(' ')
-        const results = aliasManager.search(searchText)
+        const searchText = args.slice(1).join(' ');
+        const results = aliasManager.search(searchText);
         
         if (results.length === 0) {
-          return {
-            output: `No aliases found containing: "${searchText}"
-
+          await printer.print(`No aliases found containing: "${searchText}"\n
 💡 Try:
   • Different search terms
   • Partial alias names
-  • alias list - to see all aliases`,
-            success: true
-          }
+  • alias list - to see all aliases`);
+          return { output: '', success: true };
         }
         
-        const maxNameLen = Math.max(...results.map(r => r.name.length), 10)
-        const searchResults = results
-          .map((result, index) => {
-            const name = result.name.padEnd(maxNameLen + 2)
-            const number = (index + 1).toString().padStart(3)
-            return `${number}. ${name} → ${result.command}`
-          })
-          .join('\n')
+        await printer.print(`Search results for "${searchText}" (${results.length} found):`);
+        const searchHeaders = ['#', 'Name', 'Command'];
+        const searchRows = results
+          .map((result, index) => [(index + 1).toString(), result.name, result.command]);
+        await printer.table(searchHeaders, searchRows);
         
-        return {
-          output: `Search results for "${searchText}" (${results.length} found):
-
-${searchResults}
-
-💡 Use any of these aliases by typing the alias name`,
-          success: true
-        }
+        await printer.print(`\n💡 Use any of these aliases by typing the alias name`);
+        return { output: '', success: true };
       
       case 'clear':
         const count = aliasManager.size()

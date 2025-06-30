@@ -9,7 +9,11 @@ export const scriptCommand: CommandHandler = {
   aliases: ['scr'],
   
   execute: async (context: CommandContext): Promise<CommandResult> => {
-    const { args } = context
+    const { args, printer } = context; // Added printer
+
+    if (!printer) {
+      return { output: 'Error: Printer not available.', success: false };
+    }
     
     if (args.length === 0) {
       const scripts = sessionManager.listScripts()
@@ -205,41 +209,32 @@ Use "script list" to see all scripts or "script save" to create new ones.`,
           }
         
         case 'list':
-          const scripts = sessionManager.listScripts()
+          const scripts = sessionManager.listScripts();
           
           if (scripts.length === 0) {
-            return {
-              output: `No scripts saved.
-
+            await printer.print(`No scripts saved.\n
 Create your first script:
   script save my-script "wallet status" "wallet balance"
 
-💡 Scripts help automate common command sequences!`,
-              success: true
-            }
+💡 Scripts help automate common command sequences!`);
+            return { output: '', success: true };
           }
           
-          let listOutput = `Saved Scripts (${scripts.length}/50):\n\n`
+          await printer.print(`Saved Scripts (${scripts.length}/50):`);
+          const headers = ['#', 'Name', 'Commands', 'Preview'];
+          const rows = scripts.map((script, index) => [
+            (index + 1).toString(),
+            script.name,
+            script.commands.toString() + (script.commands !== 1 ? ' cmds' : ' cmd'),
+            script.preview.length > 40 ? script.preview.substring(0, 37) + '...' : script.preview
+          ]);
+          await printer.table(headers, rows);
           
-          scripts.forEach((script, index) => {
-            const number = (index + 1).toString().padStart(2)
-            const name = script.name.padEnd(20)
-            const cmdCount = `${script.commands} cmd${script.commands !== 1 ? 's' : ''}`
-            const preview = script.preview.length > 30 ? 
-              script.preview.substring(0, 30) + '...' : script.preview
-            
-            listOutput += `${number}. ${name} ${cmdCount.padEnd(8)} ${preview}\n`
-          })
-          
-          listOutput += `\n💡 Commands:
+          await printer.print(`\n💡 Commands:
   • script run <name> - Execute a script
   • script show <name> - View script contents
-  • script remove <name> - Delete a script`
-          
-          return {
-            output: listOutput,
-            success: true
-          }
+  • script remove <name> - Delete a script`);
+          return { output: '', success: true };
         
         case 'show':
           if (args.length < 2) {
