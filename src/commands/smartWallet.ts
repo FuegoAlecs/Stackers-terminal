@@ -116,7 +116,7 @@ Smart wallets are created from your existing EOA wallet as the owner.`,
           }
         } // Close case 'create'
         
-        case 'info':
+        case 'info': { // Added scope
           if (!smartWalletManager.isInitialized()) {
             return {
               output: `❌ Smart wallet not initialized.
@@ -127,8 +127,7 @@ Use "smart create" to create a smart wallet first.`,
           }
           
           try {
-            const info = await smartWalletManager.getWalletInfo()
-            const info = await smartWalletManager.getWalletInfo();
+            const info = await smartWalletManager.getWalletInfo(); // Removed duplicate
             // const config = smartWalletManager.getConfig(); // config is not used directly here
 
             await printer.print('📱 Smart Wallet Information:\n');
@@ -191,7 +190,7 @@ Use "smart create" to create a smart wallet first.`,
           }
         } // Close case 'info'
         
-        case 'sponsor':
+        case 'sponsor': { // Added scope
           if (!smartWalletManager.isInitialized()) {
             return {
               output: `❌ Smart wallet not initialized.
@@ -264,8 +263,9 @@ This might be due to:
               success: false
             }
           }
+        } // Close case 'sponsor'
         
-        case 'send':
+        case 'send': { // Added scope
           if (!smartWalletManager.isInitialized()) {
             return {
               output: `❌ Smart wallet not initialized.
@@ -345,8 +345,9 @@ Common issues:
               success: false
             }
           }
+        } // Close case 'send'
         
-        case 'estimate':
+        case 'estimate': { // Scope already added in a previous step, ensure it's still there
           if (!smartWalletManager.isInitialized()) {
             return {
               output: `❌ Smart wallet not initialized.
