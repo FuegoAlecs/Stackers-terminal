@@ -52,9 +52,9 @@ Aliases: al status, al balance, etc.`,
           await printer.print(''); // Blank line
           await printer.print(isConnected ? 'Ready to execute blockchain queries!' : 'Check your API key configuration.');
           return { output: '', success: isConnected };
-        }
+        } // status case closed
         
-        case 'balance':
+        case 'balance': { // Added scope
           if (args.length < 2) {
             return {
               output: 'Usage: alchemy balance <address>\nExample: alchemy balance 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b',
@@ -79,9 +79,9 @@ Aliases: al status, al balance, etc.`,
           ];
           await printer.printKeyValues(balanceData, { indent: 0 }); // No indent for main data
           return { output: '', success: true };
-        }
+        } // balance case closed
         
-        case 'gas':
+        case 'gas': { // Added scope
           const gasPrice = await alchemyUtils.getGasPrice();
           const viemGasPrice = await viemUtils.getGasPrice();
           await printer.print(`Current Gas Price (${NETWORK_INFO.name}):`);
@@ -92,9 +92,9 @@ Aliases: al status, al balance, etc.`,
           ];
           await printer.printKeyValues(gasData);
           return { output: '', success: true };
-        }
+        } // gas case closed
         
-        case 'block':
+        case 'block': { // Added scope
           const blockNumberArg = args.length > 1 ? parseInt(args[1]) : undefined; // Renamed
           const blockDataResult = await alchemyUtils.getBlock(blockNumberArg); // Renamed
           await printer.print(`Block Information (Number: ${blockDataResult.number}):`);
@@ -107,9 +107,9 @@ Aliases: al status, al balance, etc.`,
           ];
           await printer.printKeyValues(blockDisplayData);
           return { output: '', success: true };
-        }
+        } // block case closed
         
-        case 'tx':
+        case 'tx': { // Added scope
           if (args.length < 2) {
             return {
               output: 'Usage: alchemy tx <transaction_hash>\nExample: alchemy tx 0x1234...',
@@ -138,7 +138,7 @@ Aliases: al status, al balance, etc.`,
           ];
           await printer.printKeyValues(txData);
           return { output: '', success: true };
-        }
+        } // tx case closed
         
         case 'nfts': { // Added block scope
           if (args.length < 2) {
