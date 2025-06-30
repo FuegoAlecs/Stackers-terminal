@@ -11,9 +11,11 @@ export interface PrintOptions {
 
 import Table from 'cli-table3';
 
-export interface PrintOptions {
-  color?: 'red' | 'green' | 'blue' | 'yellow' | 'purple' | 'cyan' | 'white' | 'gray'
-  background?: 'red' | 'green' | 'blue' | 'yellow' | 'purple' | 'cyan' | 'black'
+// Duplicate PrintOptions interface removed. The first one is kept.
+
+export interface TerminalPrinter {
+  write: (text: string, newLine?: boolean) => void
+  clear: () => void
   style?: 'bold' | 'dim' | 'italic' | 'underline'
   typing?: boolean
   typingSpeed?: number
@@ -373,11 +375,10 @@ export function createPrinter(terminal: TerminalPrinter) { // terminal: Terminal
      */
     printHelpTable: async function (
       rows: HelpTableRow[],
-      commandHeader?: string,
       commandHeader = 'COMMAND',
       descriptionHeader = 'DESCRIPTION',
-      usageHeader = 'USAGE', // Retained for clarity, maps to a header name
-      tableOptions: Table.TableConstructorOptions = {} // Allow passing cli-table3 options
+      usageHeader = 'USAGE',
+      tableOptions: Table.TableConstructorOptions = {}
     ) {
       if (!rows || rows.length === 0) {
         await this.print('No commands to display.');
