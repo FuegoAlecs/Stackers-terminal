@@ -46,7 +46,7 @@ Network: ${NETWORK_INFO.name} (Chain ID: ${NETWORK_INFO.chainId})
     
     try {
       switch (subcommand) {
-        case 'create':
+        case 'create': { // Added scope
           // Check if regular wallet is connected
           if (!walletContext || !walletContext.isConnected) {
             return {
