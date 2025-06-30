@@ -211,9 +211,9 @@ ${smartWalletManager.isInitialized() ? 'Smart wallet also disconnected' : ''}`,
           await printer.print('\nNo smart wallet created');
         }
         return { output: '', success: true };
-      }
+      } // Close 'address' scope
       
-      case 'balance':
+      case 'balance': { // Added scope
         if (!isConnected) {
           return {
             output: 'No wallet connected. Use "wallet connect" first.',
