@@ -63,7 +63,7 @@ Network: ${NETWORK_INFO.name} (${NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet'}
     const { address, isConnected, isConnecting, connectWallet, disconnectWallet, formatAddress } = walletContext
     
     switch (subcommand) {
-      case 'connect':
+      case 'connect': { // Added scope
         if (isConnected) {
           return {
             output: `Already connected to EOA wallet: ${formatAddress(address)}
@@ -98,8 +98,9 @@ After connecting, you can:
             success: false
           }
         }
+      } // Close 'connect' scope
       
-      case 'disconnect':
+      case 'disconnect': { // Added scope
         if (!isConnected) {
           return {
             output: 'No EOA wallet connected',
@@ -126,15 +127,10 @@ ${smartWalletManager.isInitialized() ? 'Smart wallet also disconnected' : ''}`,
             success: false
           }
         }
+      } // Close 'disconnect' scope
       
-      case 'status':
-        if (isConnecting) {
-          return {
-            output: 'Status: Connecting...',
-            success: true
-          }
-        }
-        
+      case 'status': { // Added scope for status
+        // The duplicated isConnecting check was an error from a previous merge, removing one.
         if (isConnecting) {
           await printer.print('Status: Connecting...');
           return { output: '', success: true };
@@ -181,9 +177,9 @@ ${smartWalletManager.isInitialized() ? 'Smart wallet also disconnected' : ''}`,
         await printer.print('Use "wallet connect" to connect your wallet');
         await printer.print('\nSmart Wallet Status: ❌ Not available (requires connected EOA)');
         return { output: '', success: true };
-      }
-      
-      case 'address':
+      } // Closing status case
+
+      case 'address': { // Added scope
         if (!isConnected) {
           return {
             output: 'No wallet connected. Use "wallet connect" first.',
