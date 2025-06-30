@@ -18,7 +18,11 @@ export const smartWalletCommand: CommandHandler = {
   aliases: ['sw'],
   
   execute: async (context: CommandContext): Promise<CommandResult> => {
-    const { args } = context
+    const { args, printer } = context; // Added printer
+
+    if (!printer) {
+      return { output: 'Error: Printer not available.', success: false };
+    }
     
     if (args.length === 0) {
       return {
@@ -61,51 +65,56 @@ Smart wallets are created from your existing EOA wallet as the owner.`,
           const gaslessEnabled = args.includes('--gasless')
           
           try {
-            await smartWalletManager.initialize(walletContext.address, gaslessEnabled)
-            const info = await smartWalletManager.getWalletInfo()
+            await smartWalletManager.initialize(walletContext.address, gaslessEnabled);
+            const info = await smartWalletManager.getWalletInfo();
             
-            return {
-              output: `🚀 Smart Wallet Created Successfully!
+            await printer.print('🚀 Smart Wallet Created Successfully!\n');
 
-📋 Smart Wallet Details:
-  Address: ${info.address}
-  Owner (EOA): ${info.owner}
-  Network: ${NETWORK_INFO.name}
-  
-🔧 Configuration:
-  Gasless Mode: ${info.gasless ? '✅ Enabled' : '❌ Disabled'}
-  Deployed: ${info.isDeployed ? '✅ Yes' : '⏳ Will deploy on first transaction'}
-  Balance: ${info.balance}
-  Nonce: ${info.nonce}
+            await printer.print('📋 Smart Wallet Details:');
+            const detailsData = [
+              { key: 'Address', value: info.address },
+              { key: 'Owner (EOA)', value: info.owner },
+              { key: 'Network', value: NETWORK_INFO.name }
+            ];
+            await printer.printKeyValues(detailsData, { indent: 2 });
 
-${info.gasless ? `💰 Gasless Features:
-  • Transactions sponsored by Alchemy
-  • No ETH needed for gas fees
-  • Seamless user experience` : `💡 Standard Mode:
-  • You pay gas fees in ETH
-  • Use "smart sponsor on" to enable gasless mode`}
+            await printer.print('\n🔧 Configuration:');
+            const configData = [
+              { key: 'Gasless Mode', value: info.gasless ? '✅ Enabled' : '❌ Disabled' },
+              { key: 'Deployed', value: info.isDeployed ? '✅ Yes' : '⏳ Will deploy on first transaction' },
+              { key: 'Balance', value: info.balance },
+              { key: 'Nonce', value: info.nonce.toString() }
+            ];
+            await printer.printKeyValues(configData, { indent: 2 });
 
-🎯 Next Steps:
-  • smart info - View wallet details
-  • smart send <to> <data> - Send transactions
-  • smart sponsor on - Enable gasless mode
-  
-⚠️  Note: Keep your EOA wallet connected as it controls the smart wallet.`,
-              success: true
+            if (info.gasless) {
+              await printer.print('\n💰 Gasless Features:');
+              await printer.print('  • Transactions sponsored by Alchemy');
+              await printer.print('  • No ETH needed for gas fees');
+              await printer.print('  • Seamless user experience');
+            } else {
+              await printer.print('\n💡 Standard Mode:');
+              await printer.print('  • You pay gas fees in ETH');
+              await printer.print('  • Use "smart sponsor on" to enable gasless mode');
             }
-          } catch (error) {
-            return {
-              output: `❌ Failed to create smart wallet: ${error instanceof Error ? error.message : 'Unknown error'}
 
-Common issues:
+            await printer.print('\n🎯 Next Steps:');
+            await printer.print('  • smart info - View wallet details');
+            await printer.print('  • smart send <to> <data> - Send transactions');
+            await printer.print('  • smart sponsor on - Enable gasless mode');
+            await printer.print('\n⚠️  Note: Keep your EOA wallet connected as it controls the smart wallet.');
+            return { output: '', success: true };
+
+          } catch (error) {
+            await printer.error(`❌ Failed to create smart wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            await printer.print(`\nCommon issues:
   • Network connectivity problems
   • Invalid Alchemy API key
-  • Insufficient permissions
-  
-Check your configuration and try again.`,
-              success: false
-            }
+  • Insufficient permissions`);
+            await printer.print('\nCheck your configuration and try again.');
+            return { output: '', success: false };
           }
+        } // Close case 'create'
         
         case 'info':
           if (!smartWalletManager.isInitialized()) {
@@ -119,52 +128,68 @@ Use "smart create" to create a smart wallet first.`,
           
           try {
             const info = await smartWalletManager.getWalletInfo()
-            const config = smartWalletManager.getConfig()
+            const info = await smartWalletManager.getWalletInfo();
+            // const config = smartWalletManager.getConfig(); // config is not used directly here
+
+            await printer.print('📱 Smart Wallet Information:\n');
+
+            await printer.print('📍 Addresses:');
+            const addressData = [
+              { key: 'Smart Wallet', value: info.address },
+              { key: 'Owner (EOA)', value: info.owner },
+              { key: 'Network', value: `${NETWORK_INFO.name} (Chain ID: ${NETWORK_INFO.chainId})` }
+            ];
+            await printer.printKeyValues(addressData, { indent: 2 });
+
+            await printer.print('\n💰 Balance & Status:');
+            const balanceStatusData = [
+              { key: 'Balance', value: info.balance },
+              { key: 'Nonce', value: info.nonce.toString() },
+              { key: 'Deployed', value: info.isDeployed ? '✅ Yes' : '⏳ Pending first transaction' }
+            ];
+            await printer.printKeyValues(balanceStatusData, { indent: 2 });
+
+            await printer.print('\n⚙️  Configuration:');
+            const configDisplayData = [ // Renamed from configData to avoid conflict
+              { key: 'Gasless Mode', value: info.gasless ? '✅ Enabled (Sponsored transactions)' : '❌ Disabled (You pay gas)' },
+              { key: 'Account Type', value: 'Smart Contract Account (ERC-4337)' },
+              { key: 'Factory', value: 'Simple Account Factory' } // Assuming this is static or from config
+            ];
+            await printer.printKeyValues(configDisplayData, { indent: 2 });
             
-            return {
-              output: `📱 Smart Wallet Information:
-
-📍 Addresses:
-  Smart Wallet: ${info.address}
-  Owner (EOA): ${info.owner}
-  Network: ${NETWORK_INFO.name} (Chain ID: ${NETWORK_INFO.chainId})
-
-💰 Balance & Status:
-  Balance: ${info.balance}
-  Nonce: ${info.nonce}
-  Deployed: ${info.isDeployed ? '✅ Yes' : '⏳ Pending first transaction'}
-
-⚙️  Configuration:
-  Gasless Mode: ${info.gasless ? '✅ Enabled (Sponsored transactions)' : '❌ Disabled (You pay gas)'}
-  Account Type: Smart Contract Account (ERC-4337)
-  Factory: Simple Account Factory
-
-${info.gasless ? `🎁 Gasless Benefits:
-  • Zero gas fees for transactions
-  • Sponsored by Alchemy Gas Manager
-  • Better user experience
-  • No need to hold ETH for gas` : `💡 Gas Payment:
-  • You pay gas fees in ETH
-  • Standard transaction costs apply
-  • Enable gasless: "smart sponsor on"`}
-
-🔧 Available Actions:
-  • smart send <to> <data> - Send user operations
-  • smart estimate <to> <data> - Estimate gas costs
-  • smart sponsor on/off - Toggle gasless mode
-
-📊 Technical Details:
-  • ERC-4337 Account Abstraction
-  • Bundler: Alchemy
-  • Entry Point: ${NETWORK_INFO.viemChain.contracts?.entryPoint?.address || 'Standard'}`,
-              success: true
+            if (info.gasless) {
+              await printer.print('\n🎁 Gasless Benefits:');
+              await printer.print('  • Zero gas fees for transactions');
+              await printer.print('  • Sponsored by Alchemy Gas Manager');
+              await printer.print('  • Better user experience');
+              await printer.print('  • No need to hold ETH for gas');
+            } else {
+              await printer.print('\n💡 Gas Payment:');
+              await printer.print('  • You pay gas fees in ETH');
+              await printer.print('  • Standard transaction costs apply');
+              await printer.print('  • Enable gasless: "smart sponsor on"');
             }
+
+            await printer.print('\n🔧 Available Actions:');
+            await printer.print('  • smart send <to> <data> - Send user operations');
+            await printer.print('  • smart estimate <to> <data> - Estimate gas costs');
+            await printer.print('  • smart sponsor on/off - Toggle gasless mode');
+
+            await printer.print('\n📊 Technical Details:');
+            const techDetailsData = [
+                {key: 'Standard', value: 'ERC-4337 Account Abstraction'},
+                {key: 'Bundler', value: 'Alchemy'},
+                {key: 'Entry Point', value: NETWORK_INFO.viemChain.contracts?.entryPoint?.address || 'Standard'}
+            ];
+            await printer.printKeyValues(techDetailsData, {indent: 2});
+
+            return { output: '', success: true };
+
           } catch (error) {
-            return {
-              output: `❌ Failed to get wallet info: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              success: false
-            }
+            await printer.error(`❌ Failed to get wallet info: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            return { output: '', success: false };
           }
+        } // Close case 'info'
         
         case 'sponsor':
           if (!smartWalletManager.isInitialized()) {
@@ -351,42 +376,53 @@ Examples:
               estimateTo as any, 
               estimateData, 
               estimateValue
-            )
+            );
             
-            return {
-              output: `⛽ User Operation Gas Estimate:
+            await printer.print('⛽ User Operation Gas Estimate:\n');
 
-📋 Transaction Details:
-  To: ${estimateTo}
-  Data: ${estimateData}
-  Value: ${estimateValue > 0n ? `${parseFloat(estimateValue.toString()) / 1e18} ETH` : '0 ETH'}
+            await printer.print('📋 Transaction Details:');
+            const txDetailsData = [
+              { key: 'To', value: estimateTo },
+              { key: 'Data', value: estimateData },
+              { key: 'Value', value: estimateValue > 0n ? `${parseFloat(estimateValue.toString()) / 1e18} ETH` : '0 ETH' }
+            ];
+            await printer.printKeyValues(txDetailsData, { indent: 2 });
 
-💰 Gas Breakdown:
-  Pre-verification Gas: ${estimate.preVerificationGas.toLocaleString()}
-  Verification Gas: ${estimate.verificationGasLimit.toLocaleString()}
-  Call Gas: ${estimate.callGasLimit.toLocaleString()}
-  Total Gas: ${estimate.totalGas.toLocaleString()}
-  
-💸 Cost Estimate:
-  Max Fee Per Gas: ${estimate.maxFeePerGas.toLocaleString()} wei
-  Total Cost: ${estimate.totalCost}${estimate.sponsored ? ' (Sponsored - FREE!)' : ''}
+            await printer.print('\n💰 Gas Breakdown:');
+            const gasBreakdownData = [
+              { key: 'Pre-verification Gas', value: estimate.preVerificationGas.toLocaleString() },
+              { key: 'Verification Gas', value: estimate.verificationGasLimit.toLocaleString() },
+              { key: 'Call Gas', value: estimate.callGasLimit.toLocaleString() },
+              { key: 'Total Gas', value: estimate.totalGas.toLocaleString() }
+            ];
+            await printer.printKeyValues(gasBreakdownData, { indent: 2 });
 
-${estimate.sponsored ? `🎁 This transaction will be sponsored!
-  • Zero cost to you
-  • Paid by Alchemy Gas Manager
-  • No ETH required for gas` : `💡 You will pay gas fees
-  • Ensure sufficient ETH balance
-  • Consider enabling gasless: "smart sponsor on"`}
+            await printer.print('\n💸 Cost Estimate:');
+            const costEstimateData = [
+              { key: 'Max Fee Per Gas', value: `${estimate.maxFeePerGas.toLocaleString()} wei` },
+              { key: 'Total Cost', value: `${estimate.totalCost}${estimate.sponsored ? ' (Sponsored - FREE!)' : ''}` }
+            ];
+            await printer.printKeyValues(costEstimateData, { indent: 2 });
 
-🚀 Ready to send? Use: smart send ${estimateTo} ${estimateData}${estimateValue > 0n ? ` ${parseFloat(estimateValue.toString()) / 1e18}` : ''}`,
-              success: true
+            if (estimate.sponsored) {
+              await printer.print('\n🎁 This transaction will be sponsored!');
+              await printer.print('  • Zero cost to you');
+              await printer.print('  • Paid by Alchemy Gas Manager');
+              await printer.print('  • No ETH required for gas');
+            } else {
+              await printer.print('\n💡 You will pay gas fees');
+              await printer.print('  • Ensure sufficient ETH balance');
+              await printer.print('  • Consider enabling gasless: "smart sponsor on"');
             }
+
+            await printer.print(`\n🚀 Ready to send? Use: smart send ${estimateTo} ${estimateData}${estimateValue > 0n ? ` ${parseFloat(estimateValue.toString()) / 1e18}` : ''}`);
+            return { output: '', success: true };
+
           } catch (error) {
-            return {
-              output: `❌ Failed to estimate gas: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              success: false
-            }
+            await printer.error(`❌ Failed to estimate gas: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            return { output: '', success: false };
           }
+        } // Close case 'estimate'
         
         case 'help':
           return {

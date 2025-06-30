@@ -13,17 +13,7 @@ import Table from 'cli-table3';
 
 // Duplicate PrintOptions interface removed. The first one is kept.
 
-export interface TerminalPrinter {
-  write: (text: string, newLine?: boolean) => void
-  clear: () => void
-  style?: 'bold' | 'dim' | 'italic' | 'underline'
-  typing?: boolean
-  typingSpeed?: number
-  newLine?: boolean
-  prefix?: string
-  icon?: string
-}
-
+// Only one TerminalPrinter interface should exist. Keeping the one with getDimensions.
 export interface TerminalPrinter {
   write: (text: string, newLine?: boolean) => void
   clear: () => void
@@ -318,36 +308,68 @@ export function createPrinter(terminal: TerminalPrinter) { // terminal: Terminal
       const numColumns = headers.length;
       if (numColumns === 0) return [];
 
-      const minContentWidths = headers.map((header, i) =>
-        Math.max(
-          (header || '').length,
-          ...rows.map(row => (row[i] || '').length)
-        )
-      );
+      const MIN_COL_WIDTH = 5; // Minimum width for any column
+      const COLUMN_PADDING = 3; // Characters per column for borders/padding like `| c |`
 
-      const totalMinContentWidth = minContentWidths.reduce((sum, w) => sum + w, 0);
-      const borderAndPadding = (numColumns * 3) + 1; // Approximate space for borders/padding per column
+      // Calculate ideal width for each column based on content
+      const idealWidths = headers.map((header, i) => {
+        const headerLength = (header || '').length;
+        const maxRowContentLength = Math.max(0, ...rows.map(row => (row[i] || '').length));
+        return Math.max(headerLength, maxRowContentLength, MIN_COL_WIDTH);
+      });
 
-      if (totalMinContentWidth + borderAndPadding <= termWidth) {
-        // If everything fits, use content widths, but allow cli-table3 to manage if some are small
-        return minContentWidths.map(w => Math.max(w, 5)); // Ensure a minimum width
+      const totalIdealContentWidth = idealWidths.reduce((sum, w) => sum + w, 0);
+      const totalRequiredWidth = totalIdealContentWidth + (numColumns * COLUMN_PADDING) + 1; // +1 for the last border
+
+      let allocatedWidths = [...idealWidths];
+
+      if (totalRequiredWidth > termWidth) {
+        // Not enough space, need to shrink columns
+        const overflow = totalRequiredWidth - termWidth;
+        let totalReducibleWidth = 0; // Sum of widths of columns that can be shrunk
+
+        idealWidths.forEach(w => {
+          if (w > MIN_COL_WIDTH) {
+            totalReducibleWidth += (w - MIN_COL_WIDTH);
+          }
+        });
+
+        if (totalReducibleWidth <= 0) { // Cannot shrink any further
+          // All columns are at MIN_COL_WIDTH or less, distribute termWidth somewhat evenly
+          // This is a fallback, cli-table3's wordWrap will be crucial here.
+          const evenWidth = Math.max(MIN_COL_WIDTH, Math.floor((termWidth - (numColumns * COLUMN_PADDING) -1) / numColumns));
+          return headers.map(() => evenWidth);
+        }
+
+        let currentOverflow = overflow;
+        for (let i = 0; i < allocatedWidths.length; i++) {
+          if (allocatedWidths[i] > MIN_COL_WIDTH) {
+            const proportion = (allocatedWidths[i] - MIN_COL_WIDTH) / totalReducibleWidth;
+            const reduction = Math.round(overflow * proportion);
+            allocatedWidths[i] = Math.max(MIN_COL_WIDTH, allocatedWidths[i] - reduction);
+            currentOverflow -= reduction; // Track remaining overflow to distribute if rounding caused issues
+          }
+        }
+        // If there's still overflow due to rounding, try to remove it from widest columns
+        // This part can be made more sophisticated if needed.
+        // For now, the above proportional reduction is the primary mechanism.
+
+      } else if (totalRequiredWidth < termWidth) {
+        // Extra space available, distribute it.
+        // For simplicity, we can let cli-table3 use the ideal widths and manage the extra space,
+        // or proportionally increase them. Let's stick to ideal widths if they fit.
+        // Or, distribute the slack.
+        const slack = termWidth - totalRequiredWidth;
+        let totalFlexibleWidth = idealWidths.reduce((sum, w) => sum + w, 0); // or based on some other metric
+        if (totalFlexibleWidth > 0) {
+            for (let i = 0; i < allocatedWidths.length; i++) {
+                const proportion = allocatedWidths[i] / totalFlexibleWidth;
+                allocatedWidths[i] += Math.floor(slack * proportion);
+            }
+        }
       }
-
-      // Attempt to distribute widths, prioritizing columns with more content
-      // This is a naive distribution. cli-table3's own wrapping might be better.
-      // We can also return nulls to let cli-table3 decide automatically based on `wordWrap`.
-      // For now, let cli-table3 handle it if it overflows.
-      // Returning null for colWidths tells cli-table3 to auto-size.
-      // However, we can provide initial hints based on content.
-
-      // If we want to force fit, we'd need more complex logic.
-      // For now, let's provide the minContentWidths and let cli-table3 wrap.
-      // If termWidth is very small, even this might not be enough.
-      // A more robust solution is to let cli-table3 do its thing with wordWrap=true
-      // and only specify colWidths if you have specific requirements.
-      // Let's try returning null to let cli-table3 do the heavy lifting with wordWrap.
-      // This is generally better than trying to micromanage it here without full context.
-      return headers.map(() => null); // Let cli-table3 auto-calculate based on content and wordWrap
+      // Ensure final widths are at least MIN_COL_WIDTH
+      return allocatedWidths.map(w => Math.max(w, MIN_COL_WIDTH));
     },
 
     /**
@@ -418,9 +440,65 @@ export function createPrinter(terminal: TerminalPrinter) { // terminal: Terminal
       };
 
       await this.table(headers, tableRows, defaultHelpTableOptions);
+    }, // End of printHelpTable
+
+    printKeyValues: async function (
+      this: ReturnType<typeof createPrinter>, // Important for `this.print`
+      data: Array<{ key: string; value: any }>,
+      options: KeyValuePrintOptions = {}
+    ): Promise<void> {
+      const { cols } = terminal.getDimensions();
+      const {
+        indent = 0,
+        keyStyle = { style: 'bold' }, // Default key style
+        valueStyle = {},
+        separator = ': '
+      } = options;
+
+      const indentString = ' '.repeat(indent);
+
+      let actualKeyWidth = options.keyWidth || 0;
+      if (!options.keyWidth) {
+        data.forEach(item => {
+          if (item.key.length > actualKeyWidth) {
+            actualKeyWidth = item.key.length;
+          }
+        });
+      }
+
+      for (const item of data) {
+        const keyPart = `${indentString}${item.key.padEnd(actualKeyWidth)}`;
+        const valueString = String(item.value);
+
+        const valueMaxWidth = cols - keyPart.length - separator.length -1; // -1 for safety/cursor
+
+        const wrappedValueLines = wordWrap(valueString, valueMaxWidth > 0 ? valueMaxWidth : 1); // Ensure positive maxWidth
+
+        // Print the key and the first line of the value
+        await this.print(
+          `${keyPart}${separator}${wrappedValueLines[0] || ''}`,
+          { ...keyStyle, ...valueStyle } // Combine styles, valueStyle can override keyStyle for the value part if needed
+                                        // Or, more simply, apply keyStyle only to keyPart and valueStyle to value
+        );
+        // A more precise styling would involve printing key and value parts separately if styles differ.
+        // For now, let's assume a combined approach or rely on user passing specific options.
+        // Corrected approach for distinct key/value styling:
+        // await this.print(`${keyPart}`, { ...keyStyle, newLine: false });
+        // await this.print(`${separator}${wrappedValueLines[0] || ''}`, { ...valueStyle, newLine: true });
+
+
+        // Print subsequent wrapped lines of the value
+        for (let i = 1; i < wrappedValueLines.length; i++) {
+          await this.print(
+            `${indentString}${' '.repeat(actualKeyWidth)}${separator.replace(/./g, ' ')}${wrappedValueLines[i]}`,
+            valueStyle
+          );
+        }
+      }
     }
-  }
-  return printer
+  }; // End of printer object definition
+
+  return printer as PrinterInstance; // Cast to PrinterInstance
 }
 
 /**
@@ -505,3 +583,61 @@ export interface HelpTableRow {
 }
 
 // formatHelpTable function is removed as printHelpTable now uses printer.table directly.
+
+/**
+ * Simple word wrapping utility
+ */
+function wordWrap(text: string, maxWidth: number): string[] {
+  if (maxWidth <= 0) return [text]; // Avoid infinite loops or errors with no width
+  const lines: string[] = [];
+  let currentLine = '';
+
+  // Strip ANSI codes for length calculation during wrapping, but keep them in the output.
+  // This is a simplified ANSI stripper, might not cover all edge cases.
+  const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*[mGKH]/g, '');
+
+  // Split by words, keeping track of original spacing to roughly preserve it.
+  // This regex splits by space but also captures sequences of spaces.
+  const words = text.split(/(\s+)/);
+
+  for (const word of words) {
+    if (word.match(/^\s+$/)) { // if it's just whitespace
+      currentLine += word;
+      continue;
+    }
+    const visibleWordLength = stripAnsi(word).length;
+    const visibleLineLength = stripAnsi(currentLine).length;
+
+    if (visibleLineLength + visibleWordLength > maxWidth && visibleLineLength > 0) {
+      lines.push(currentLine.trimEnd()); // Trim trailing space from the completed line
+      currentLine = word;
+    } else {
+      currentLine += word;
+    }
+  }
+  if (currentLine.length > 0) {
+    lines.push(currentLine.trimEnd());
+  }
+  return lines.map(l => l.trimStart()); // Trim leading space from new lines
+}
+
+// Add printKeyValues to the printer object
+export interface KeyValuePrintOptions {
+  indent?: number;
+  keyWidth?: number; // Explicit width for the key column
+  valueStyle?: PrintOptions; // Style for the value part
+  keyStyle?: PrintOptions; // Style for the key part (e.g., bold)
+  separator?: string; // Default ": "
+}
+
+// Extend the return type of createPrinter to include printKeyValues
+export type PrinterInstance = ReturnType<typeof createPrinter> & {
+   printKeyValues: (data: Array<{ key: string; value: any }>, options?: KeyValuePrintOptions) => Promise<void>;
+};
+
+
+// Modify createPrinter to add printKeyValues
+// (This requires changing how createPrinter is defined or its return type)
+// For simplicity, I'll add it to the returned object directly.
+// The type PrinterInstance above helps ensure TypeScript knows about it.
+// The actual modification will be in the createPrinter's return block.

@@ -39,18 +39,20 @@ Aliases: al status, al balance, etc.`,
     
     try {
       switch (subcommand) {
-        case 'status':
-          const isConnected = await checkAlchemyConnection()
-          return {
-            output: `Alchemy Connection: ${isConnected ? '✅ Connected' : '❌ Failed'}
-Network: ${NETWORK_INFO.name}
-Chain ID: ${NETWORK_INFO.chainId}
-Environment: ${NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet'}
-RPC Endpoint: ${NETWORK_INFO.viemChain.rpcUrls.default.http[0]}
-
-${isConnected ? 'Ready to execute blockchain queries!' : 'Check your API key configuration.'}`,
-            success: isConnected
-          }
+        case 'status': {
+          const isConnected = await checkAlchemyConnection();
+          const statusData = [
+            { key: 'Alchemy Connection', value: isConnected ? '✅ Connected' : '❌ Failed' },
+            { key: 'Network', value: NETWORK_INFO.name },
+            { key: 'Chain ID', value: NETWORK_INFO.chainId },
+            { key: 'Environment', value: NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet' },
+            { key: 'RPC Endpoint', value: NETWORK_INFO.viemChain.rpcUrls.default.http[0] }
+          ];
+          await printer.printKeyValues(statusData);
+          await printer.print(''); // Blank line
+          await printer.print(isConnected ? 'Ready to execute blockchain queries!' : 'Check your API key configuration.');
+          return { output: '', success: isConnected };
+        }
         
         case 'balance':
           if (args.length < 2) {
@@ -68,39 +70,44 @@ ${isConnected ? 'Ready to execute blockchain queries!' : 'Check your API key con
             }
           }
           
-          const balance = await alchemyUtils.getBalance(address)
-          return {
-            output: `Balance for ${address}:
-ETH: ${balance.formatted}
-Wei: ${balance.wei}
-Network: ${NETWORK_INFO.name}`,
-            success: true
-          }
+          const balanceResult = await alchemyUtils.getBalance(address); // Renamed
+          await printer.print(`Balance for ${address}:`);
+          const balanceData = [
+            { key: 'ETH', value: balanceResult.formatted },
+            { key: 'Wei', value: balanceResult.wei.toString() }, // Ensure value is string
+            { key: 'Network', value: NETWORK_INFO.name }
+          ];
+          await printer.printKeyValues(balanceData, { indent: 0 }); // No indent for main data
+          return { output: '', success: true };
+        }
         
         case 'gas':
-          const gasPrice = await alchemyUtils.getGasPrice()
-          const viemGasPrice = await viemUtils.getGasPrice()
-          return {
-            output: `Current Gas Price (${NETWORK_INFO.name}):
-Alchemy SDK: ${gasPrice.formatted}
-Viem Client: ${viemGasPrice.formatted}
-Wei: ${gasPrice.wei}`,
-            success: true
-          }
+          const gasPrice = await alchemyUtils.getGasPrice();
+          const viemGasPrice = await viemUtils.getGasPrice();
+          await printer.print(`Current Gas Price (${NETWORK_INFO.name}):`);
+          const gasData = [
+            { key: 'Alchemy SDK', value: gasPrice.formatted },
+            { key: 'Viem Client', value: viemGasPrice.formatted },
+            { key: 'Wei', value: gasPrice.wei.toString() }
+          ];
+          await printer.printKeyValues(gasData);
+          return { output: '', success: true };
+        }
         
         case 'block':
-          const blockNumber = args.length > 1 ? parseInt(args[1]) : undefined
-          const block = await alchemyUtils.getBlock(blockNumber)
-          return {
-            output: `Block Information:
-Number: ${block.number}
-Hash: ${block.hash}
-Timestamp: ${new Date(block.timestamp * 1000).toISOString()}
-Transactions: ${block.transactions.length}
-Gas Used: ${block.gasUsed?.toString() || 'N/A'}
-Gas Limit: ${block.gasLimit?.toString() || 'N/A'}`,
-            success: true
-          }
+          const blockNumberArg = args.length > 1 ? parseInt(args[1]) : undefined; // Renamed
+          const blockDataResult = await alchemyUtils.getBlock(blockNumberArg); // Renamed
+          await printer.print(`Block Information (Number: ${blockDataResult.number}):`);
+          const blockDisplayData = [
+            { key: 'Hash', value: blockDataResult.hash },
+            { key: 'Timestamp', value: new Date(blockDataResult.timestamp * 1000).toISOString() },
+            { key: 'Transactions', value: blockDataResult.transactions.length.toString() },
+            { key: 'Gas Used', value: blockDataResult.gasUsed?.toString() || 'N/A' },
+            { key: 'Gas Limit', value: blockDataResult.gasLimit?.toString() || 'N/A' }
+          ];
+          await printer.printKeyValues(blockDisplayData);
+          return { output: '', success: true };
+        }
         
         case 'tx':
           if (args.length < 2) {
@@ -120,17 +127,18 @@ Gas Limit: ${block.gasLimit?.toString() || 'N/A'}`,
             }
           }
           
-          return {
-            output: `Transaction Details:
-Hash: ${transaction.hash}
-From: ${transaction.from}
-To: ${transaction.to || 'Contract Creation'}
-Value: ${parseFloat(transaction.value?.toString() || '0') / 1e18} ETH
-Gas Price: ${parseFloat(transaction.gasPrice?.toString() || '0') / 1e9} Gwei
-Block: ${transaction.blockNumber}
-Status: ${transaction.blockNumber ? 'Confirmed' : 'Pending'}`,
-            success: true
-          }
+          await printer.print(`Transaction Details (Hash: ${transaction.hash}):`);
+          const txData = [
+            { key: 'From', value: transaction.from },
+            { key: 'To', value: transaction.to || 'Contract Creation' },
+            { key: 'Value', value: `${parseFloat(transaction.value?.toString() || '0') / 1e18} ETH` },
+            { key: 'Gas Price', value: `${parseFloat(transaction.gasPrice?.toString() || '0') / 1e9} Gwei` },
+            { key: 'Block', value: transaction.blockNumber?.toString() || 'Pending' },
+            { key: 'Status', value: transaction.blockNumber ? 'Confirmed' : 'Pending' }
+          ];
+          await printer.printKeyValues(txData);
+          return { output: '', success: true };
+        }
         
         case 'nfts': { // Added block scope
           if (args.length < 2) {

@@ -18,7 +18,13 @@ export const walletCommand: CommandHandler = {
   aliases: ['w'],
   
   execute: async (context: CommandContext): Promise<CommandResult> => {
-    const { args } = context
+    const { args, printer } = context; // Added printer
+
+    if (!printer) {
+      // This case should ideally not happen if context always provides a printer.
+      // However, good to have a fallback or clear error.
+      return { output: 'Error: Printer not available for wallet command.', success: false };
+    }
     
     if (args.length === 0) {
       const smartWalletStatus = smartWalletManager.isInitialized() ? '✅ Active' : '❌ Not created'
@@ -129,36 +135,53 @@ ${smartWalletManager.isInitialized() ? 'Smart wallet also disconnected' : ''}`,
           }
         }
         
+        if (isConnecting) {
+          await printer.print('Status: Connecting...');
+          return { output: '', success: true };
+        }
+
         if (isConnected) {
+          const eoaStatusData = [
+            { key: 'EOA Wallet Status', value: 'Connected ✅' },
+            { key: 'Address', value: formatAddress(address) },
+            { key: 'Full Address', value: address },
+            { key: 'Network', value: NETWORK_INFO.name },
+            { key: 'Chain ID', value: NETWORK_INFO.chainId.toString() },
+            { key: 'Environment', value: NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet' }
+          ];
+          await printer.printKeyValues(eoaStatusData);
+
+          await printer.print(''); // Blank line for separation
+
           const smartWalletInfo = smartWalletManager.isInitialized() 
             ? await smartWalletManager.getWalletInfo().catch(() => null)
-            : null
+            : null;
           
-          return {
-            output: `EOA Wallet Status: Connected ✅
-Address: ${formatAddress(address)}
-Full Address: ${address}
-Network: ${NETWORK_INFO.name}
-Chain ID: ${NETWORK_INFO.chainId}
-Environment: ${NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet'}
-
-Smart Wallet Status: ${smartWalletInfo ? '✅ Active' : '❌ Not created'}
-${smartWalletInfo ? `Smart Address: ${smartWalletInfo.address}
-Gasless Mode: ${smartWalletInfo.gasless ? '✅ Enabled' : '❌ Disabled'}` : 'Use "smart create" to create a smart wallet'}
-
-💡 You have both EOA and smart wallet capabilities available!`,
-            success: true
+          const swStatusData = [
+            { key: 'Smart Wallet Status', value: smartWalletInfo ? '✅ Active' : '❌ Not created' }
+          ];
+          if (smartWalletInfo) {
+            swStatusData.push({ key: 'Smart Address', value: smartWalletInfo.address });
+            swStatusData.push({ key: 'Gasless Mode', value: smartWalletInfo.gasless ? '✅ Enabled' : '❌ Disabled' });
+          } else {
+            swStatusData.push({key: '', value: 'Use "smart create" to create a smart wallet.'});
           }
-        }
-        
-        return {
-          output: `EOA Wallet Status: Not connected ❌
-Network: ${NETWORK_INFO.name}
-Use "wallet connect" to connect your wallet
+          await printer.printKeyValues(swStatusData);
 
-Smart Wallet Status: ❌ Not available (requires connected EOA)`,
-          success: true
+          await printer.print('\n💡 You have both EOA and smart wallet capabilities available!');
+          return { output: '', success: true };
         }
+
+        // Not connected
+        const notConnectedData = [
+            { key: 'EOA Wallet Status', value: 'Not connected ❌' },
+            { key: 'Network', value: NETWORK_INFO.name }
+        ];
+        await printer.printKeyValues(notConnectedData);
+        await printer.print('Use "wallet connect" to connect your wallet');
+        await printer.print('\nSmart Wallet Status: ❌ Not available (requires connected EOA)');
+        return { output: '', success: true };
+      }
       
       case 'address':
         if (!isConnected) {
@@ -170,20 +193,29 @@ Smart Wallet Status: ❌ Not available (requires connected EOA)`,
         
         const smartWalletInfo = smartWalletManager.isInitialized() 
           ? await smartWalletManager.getWalletInfo().catch(() => null)
-          : null
+          : null;
         
-        return {
-          output: `EOA Wallet Address:
-Full Address: ${address}
-Short Address: ${formatAddress(address)}
-Network: ${NETWORK_INFO.name}
+        await printer.print('EOA Wallet Address:');
+        const eoaAddressData = [
+          { key: 'Full Address', value: address },
+          { key: 'Short Address', value: formatAddress(address) },
+          { key: 'Network', value: NETWORK_INFO.name }
+        ];
+        await printer.printKeyValues(eoaAddressData, { indent: 0 });
 
-${smartWalletInfo ? `Smart Wallet Address:
-Full Address: ${smartWalletInfo.address}
-Short Address: ${formatAddress(smartWalletInfo.address)}
-Relationship: Smart wallet controlled by EOA` : 'No smart wallet created'}`,
-          success: true
+        if (smartWalletInfo) {
+          await printer.print('\nSmart Wallet Address:');
+          const swAddressData = [
+            { key: 'Full Address', value: smartWalletInfo.address },
+            { key: 'Short Address', value: formatAddress(smartWalletInfo.address) },
+            { key: 'Relationship', value: 'Smart wallet controlled by EOA' }
+          ];
+          await printer.printKeyValues(swAddressData, { indent: 0 });
+        } else {
+          await printer.print('\nNo smart wallet created');
         }
+        return { output: '', success: true };
+      }
       
       case 'balance':
         if (!isConnected) {
@@ -194,58 +226,66 @@ Relationship: Smart wallet controlled by EOA` : 'No smart wallet created'}`,
         }
         
         try {
-          const balance = await alchemyUtils.getBalance(address)
-          const gasPrice = await alchemyUtils.getGasPrice()
+          const balanceResult = await alchemyUtils.getBalance(address);
+          const gasPriceResult = await alchemyUtils.getGasPrice();
           
-          let smartWalletBalance = ''
+          await printer.print(`EOA Wallet Balance (${NETWORK_INFO.name}):`);
+          const eoaBalanceData = [
+            { key: 'Address', value: formatAddress(address) },
+            { key: 'Balance', value: balanceResult.formatted },
+            { key: 'Wei', value: balanceResult.wei.toString() }
+          ];
+          await printer.printKeyValues(eoaBalanceData);
+
           if (smartWalletManager.isInitialized()) {
             try {
-              const smartInfo = await smartWalletManager.getWalletInfo()
-              smartWalletBalance = `
-Smart Wallet Balance: ${smartInfo.balance}
-Smart Wallet Address: ${formatAddress(smartInfo.address)}`
+              const smartInfo = await smartWalletManager.getWalletInfo();
+              await printer.print('\nSmart Wallet Balance:');
+              const swBalanceData = [
+                { key: 'Balance', value: smartInfo.balance },
+                { key: 'Address', value: formatAddress(smartInfo.address) }
+              ];
+              await printer.printKeyValues(swBalanceData);
             } catch {
-              smartWalletBalance = '\nSmart Wallet: Error fetching balance'
+              await printer.print('\nSmart Wallet: Error fetching balance');
             }
           }
           
-          return {
-            output: `EOA Wallet Balance (${NETWORK_INFO.name}):
-Address: ${formatAddress(address)}
-Balance: ${balance.formatted}
-Wei: ${balance.wei}${smartWalletBalance}
+          await printer.print('\nNetwork Info:');
+          const networkData = [
+            { key: 'Gas Price', value: gasPriceResult.formatted },
+            { key: 'Chain ID', value: NETWORK_INFO.chainId.toString() }
+          ];
+          await printer.printKeyValues(networkData);
 
-Network Info:
-Gas Price: ${gasPrice.formatted}
-Chain ID: ${NETWORK_INFO.chainId}
-
-💡 Tips:
+          await printer.print(`\n💡 Tips:
   • Use "alchemy tokens ${address}" to see token balances
-  • Create smart wallet for gasless transactions: "smart create --gasless"`,
-            success: true
-          }
+  • Create smart wallet for gasless transactions: "smart create --gasless"`);
+          return { output: '', success: true };
+
         } catch (error) {
-          return {
-            output: `Failed to fetch balance: ${error instanceof Error ? error.message : 'Unknown error'}
-Make sure you're connected to ${NETWORK_INFO.name} and your API key is valid.`,
-            success: false
-          }
+          await printer.error(`Failed to fetch balance: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          await printer.print(`Make sure you're connected to ${NETWORK_INFO.name} and your API key is valid.`);
+          return { output: '', success: false };
         }
+      }
       
-      case 'network':
-        return {
-          output: `Current Network Configuration:
-Name: ${NETWORK_INFO.name}
-Chain ID: ${NETWORK_INFO.chainId}
-Type: ${NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet'}
-RPC: ${NETWORK_INFO.viemChain.rpcUrls.default.http[0]}
+      case 'network': {
+        await printer.print('Current Network Configuration:');
+        const netData = [
+          { key: 'Name', value: NETWORK_INFO.name },
+          { key: 'Chain ID', value: NETWORK_INFO.chainId.toString() },
+          { key: 'Type', value: NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet' },
+          { key: 'RPC', value: NETWORK_INFO.viemChain.rpcUrls.default.http[0] }
+        ];
+        await printer.printKeyValues(netData);
 
-${isConnected ? `Connected EOA Wallet: ${formatAddress(address)}` : 'No EOA wallet connected'}
-${smartWalletManager.isInitialized() ? 'Smart Wallet: ✅ Active' : 'Smart Wallet: ❌ Not created'}
+        await printer.print(`\n${isConnected ? `Connected EOA Wallet: ${formatAddress(address)}` : 'No EOA wallet connected'}`);
+        await printer.print(`${smartWalletManager.isInitialized() ? 'Smart Wallet: ✅ Active' : 'Smart Wallet: ❌ Not created'}`);
 
-💡 This app supports both EOA and smart wallets on ${NETWORK_INFO.name}`,
-          success: true
-        }
+        await printer.print(`\n💡 This app supports both EOA and smart wallets on ${NETWORK_INFO.name}`);
+        return { output: '', success: true };
+      }
       
       default:
         return {

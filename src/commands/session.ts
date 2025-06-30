@@ -9,7 +9,11 @@ export const sessionCommand: CommandHandler = {
   aliases: ['sess'],
   
   execute: async (context: CommandContext): Promise<CommandResult> => {
-    const { args } = context
+    const { args, printer } = context; // Added printer
+
+    if (!printer) {
+      return { output: 'Error: Printer not available.', success: false };
+    }
     
     if (args.length === 0) {
       const stats = sessionManager.getStats()
@@ -39,48 +43,60 @@ export const sessionCommand: CommandHandler = {
     try {
       switch (subcommand) {
         case 'info':
-          const session = sessionManager.getSession()
-          const stats = sessionManager.getStats()
+          const session = sessionManager.getSession();
+          const stats = sessionManager.getStats();
           
-          return {
-            output: `📊 Terminal Session Information:
+          await printer.print('📊 Terminal Session Information:\n');
 
-🔗 Wallet Status:
-  Connected: ${session.wallet.isConnected ? '✅ Yes' : '❌ No'}
-  ${session.wallet.address ? `Address: ${session.wallet.address}` : 'Address: Not connected'}
-  ${session.wallet.networkName ? `Network: ${session.wallet.networkName}` : 'Network: Unknown'}
-  ${session.wallet.chainId ? `Chain ID: ${session.wallet.chainId}` : ''}
+          await printer.print('🔗 Wallet Status:');
+          const walletStatusData = [
+            { key: 'Connected', value: session.wallet.isConnected ? '✅ Yes' : '❌ No' },
+            { key: 'Address', value: session.wallet.address || 'Not connected' },
+            { key: 'Network', value: session.wallet.networkName || 'Unknown' },
+            { key: 'Chain ID', value: session.wallet.chainId?.toString() || '' }
+          ];
+          await printer.printKeyValues(walletStatusData, { indent: 2 });
 
-🧠 Smart Wallet:
-  Initialized: ${session.smartWallet.isInitialized ? '✅ Yes' : '❌ No'}
-  ${session.smartWallet.address ? `Address: ${session.smartWallet.address}` : 'Address: Not created'}
-  Gasless Mode: ${session.smartWallet.gasless ? '✅ Enabled' : '❌ Disabled'}
-  ${session.smartWallet.owner ? `Owner: ${session.smartWallet.owner}` : ''}
+          await printer.print('\n🧠 Smart Wallet:');
+          const smartWalletData = [
+            { key: 'Initialized', value: session.smartWallet.isInitialized ? '✅ Yes' : '❌ No' },
+            { key: 'Address', value: session.smartWallet.address || 'Not created' },
+            { key: 'Gasless Mode', value: session.smartWallet.gasless ? '✅ Enabled' : '❌ Disabled' },
+            { key: 'Owner', value: session.smartWallet.owner || '' }
+          ];
+          await printer.printKeyValues(smartWalletData, { indent: 2 });
 
-📚 Data Summary:
-  Command History: ${stats.historySize}/${1000} commands
-  Aliases: ${stats.aliasCount}/100 shortcuts
-  ABIs: ${stats.abiCount}/50 loaded
-  Scripts: ${stats.scriptCount}/50 saved
+          await printer.print('\n📚 Data Summary:');
+          const dataSummary = [
+            { key: 'Command History', value: `${stats.historySize}/${1000} commands` },
+            { key: 'Aliases', value: `${stats.aliasCount}/100 shortcuts` },
+            { key: 'ABIs', value: `${stats.abiCount}/50 loaded` },
+            { key: 'Scripts', value: `${stats.scriptCount}/50 saved` }
+          ];
+          await printer.printKeyValues(dataSummary, { indent: 2 });
 
-⏰ Session Details:
-  Last Updated: ${new Date(stats.lastUpdated).toLocaleString()}
-  Session Age: ${stats.sessionAge}
-  Storage: Browser localStorage
+          await printer.print('\n⏰ Session Details:');
+          const sessionDetails = [
+            { key: 'Last Updated', value: new Date(stats.lastUpdated).toLocaleString() },
+            { key: 'Session Age', value: stats.sessionAge },
+            { key: 'Storage', value: 'Browser localStorage' }
+          ];
+          await printer.printKeyValues(sessionDetails, { indent: 2 });
 
-💾 Data Persistence:
-  ✅ Command history and aliases
-  ✅ Loaded ABIs and contract data
-  ✅ Saved scripts and workflows
-  ✅ Wallet connection preferences
-  ✅ Smart wallet configuration
+          await printer.print('\n💾 Data Persistence:');
+          await printer.print('  ✅ Command history and aliases');
+          await printer.print('  ✅ Loaded ABIs and contract data');
+          await printer.print('  ✅ Saved scripts and workflows');
+          await printer.print('  ✅ Wallet connection preferences');
+          await printer.print('  ✅ Smart wallet configuration');
 
-🔧 Management:
-  • session export - Backup your session
-  • session import - Restore from backup
-  • session reset - Start fresh`,
-            success: true
-          }
+          await printer.print('\n🔧 Management:');
+          await printer.print('  • session export - Backup your session');
+          await printer.print('  • session import - Restore from backup');
+          await printer.print('  • session reset - Start fresh');
+
+          return { output: '', success: true };
+        } // Close case 'info'
         
         case 'export':
           const exportData = sessionManager.export()
