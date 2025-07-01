@@ -6,7 +6,8 @@ import { cn } from '../../lib/utils'
 import { commandRouter } from '../../commands'
 import { useWallet } from '../../hooks/useWallet'
 import { useSession } from '../../hooks/useSession'
-import { setWalletContext } from '../../commands/wallet'
+// Remove old context import: import { setWalletContext } from '../../commands/wallet'
+import { setCommandWalletContext } from '../../lib/commandWalletContext' // New import
 import { commandHistory } from '../../lib/CommandHistory'
 import { aliasManager } from '../../lib/AliasManager'
 import { createPrinter, formatCommandOutput } from '../../lib/terminalPrint'
@@ -62,7 +63,8 @@ const Terminal: React.FC<TerminalProps> = ({
 
   // Set wallet context for commands to use
   useEffect(() => {
-    setWalletContext(walletContext)
+    // Use the new centralized context setter
+    setCommandWalletContext(walletContext)
   }, [walletContext])
 
   // Update session when wallet changes

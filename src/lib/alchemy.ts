@@ -244,25 +244,26 @@ export const checkAlchemyConnection = async (): Promise<{ success: boolean; mess
     return { success: false, message: 'VITE_ALCHEMY_API_KEY is not set in environment variables.' };
   }
   try {
-    // Attempt a more specific call that's likely to require a valid API key,
-    // for example, getting transaction history for a zero address (should be cheap and fast).
-    // Replace with a better check if Alchemy provides a dedicated health/auth check endpoint.
+    // Attempt a more specific call that's likely to require a valid API key.
+    // Using getAssetTransfers for the zero address with a small count.
     await alchemy.core.getAssetTransfers({
         fromAddress: '0x0000000000000000000000000000000000000000', // Zero address
         maxCount: 1, // We only need to see if the call authenticates
-        category: ['external']
+        category: ['external'] // Specify category to make the request more concrete
     });
     return { success: true, message: 'Successfully connected to Alchemy and validated API key.' };
   } catch (error: any) {
     let errorMessage = 'Alchemy connection failed.';
-    if (error.message) {
+    // It's good practice to check if error.message exists
+    if (error && error.message) {
       errorMessage += ` Details: ${error.message}`;
     }
-    // Check for common API key related errors if possible (pseudo-code, actual error structure may vary)
-    if (error.code === -32000 || (error.message && error.message.includes('API key'))) {
-        errorMessage = 'Alchemy API key is invalid or does not have permissions.';
+    // Check for common API key related error patterns.
+    // The exact error codes/messages can vary, so this might need adjustment based on Alchemy's responses.
+    if (error && (error.code === -32000 || (error.message && error.message.toLowerCase().includes('api key')) || (error.message && error.message.toLowerCase().includes('authentication')))) {
+        errorMessage = 'Alchemy API key may be invalid, missing, or lack necessary permissions for this operation.';
     }
-    console.error('Alchemy connection failed:', error);
+    console.error('Alchemy connection check failed:', error); // Log the full error for server-side debugging
     return { success: false, message: errorMessage };
   }
 }

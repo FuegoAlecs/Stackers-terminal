@@ -5,11 +5,9 @@ import { smartWalletManager } from '../lib/smartWallet'
 
 // We'll need to access wallet state from the terminal
 // This will be handled through a global wallet context
-let walletContext: any = null
-
-export const setWalletContext = (context: any) => {
-  walletContext = context
-}
+// Remove local context: let walletContext: any = null
+// Remove local setter: export const setWalletContext = (context: any) => { walletContext = context }
+import { getCommandWalletContext } from '../lib/commandWalletContext'; // New import
 
 export const walletCommand: CommandHandler = {
   name: 'wallet',
@@ -53,14 +51,16 @@ Network: ${NETWORK_INFO.name} (${NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet'}
     
     const subcommand = args[0].toLowerCase()
     
-    if (!walletContext) {
+    const currentWalletContext = getCommandWalletContext(); // Use the shared context getter
+
+    if (!currentWalletContext) {
       return {
-        output: 'Error: Wallet context not available. Please ensure wallet provider is initialized.',
+        output: 'Error: Wallet context not available. Please ensure wallet provider is initialized correctly in Terminal.tsx.',
         success: false
       }
     }
     
-    const { address, isConnected, isConnecting, connectWallet, disconnectWallet, formatAddress } = walletContext
+    const { address, isConnected, isConnecting, connectWallet, disconnectWallet, formatAddress } = currentWalletContext;
     
     switch (subcommand) {
       case 'connect': { // Added scope

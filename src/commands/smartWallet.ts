@@ -5,11 +5,9 @@ import { NETWORK_INFO } from '../lib/alchemy'
 import { useWallet } from '../hooks/useWallet'
 
 // We'll need access to the regular wallet context
-let walletContext: any = null
-
-export const setWalletContext = (context: any) => {
-  walletContext = context
-}
+// Remove local context: let walletContext: any = null
+// Remove local setter: export const setWalletContext = (context: any) => { walletContext = context }
+import { getCommandWalletContext } from '../lib/commandWalletContext'; // New import
 
 export const smartWalletCommand: CommandHandler = {
   name: 'smart',
@@ -47,10 +45,11 @@ Network: ${NETWORK_INFO.name} (Chain ID: ${NETWORK_INFO.chainId})
     try {
       switch (subcommand) {
         case 'create': { // Added scope
+          const currentWalletContext = getCommandWalletContext(); // Use the shared context getter
           // Check if regular wallet is connected
-          if (!walletContext || !walletContext.isConnected) {
+          if (!currentWalletContext || !currentWalletContext.isConnected || !currentWalletContext.address) {
             return {
-              output: `❌ No EOA wallet connected.
+              output: `❌ No EOA wallet connected or address is missing.
 
 To create a smart wallet:
 1. First connect your EOA wallet: wallet connect
@@ -65,7 +64,8 @@ Smart wallets are created from your existing EOA wallet as the owner.`,
           const gaslessEnabled = args.includes('--gasless')
           
           try {
-            await smartWalletManager.initialize(walletContext.address, gaslessEnabled);
+            // Use currentWalletContext.address from the shared context
+            await smartWalletManager.initialize(currentWalletContext.address, gaslessEnabled);
             const info = await smartWalletManager.getWalletInfo();
             
             await printer.print('🚀 Smart Wallet Created Successfully!\n');

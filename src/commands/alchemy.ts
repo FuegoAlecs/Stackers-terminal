@@ -40,21 +40,23 @@ Aliases: al status, al balance, etc.`,
     try {
       switch (subcommand) {
         case 'status': {
-          const connectionResult = await checkAlchemyConnection();
+          const connectionResult = await checkAlchemyConnection(); // This calls the restored enhanced version
           const statusIcon = connectionResult.success ? '✅' : '❌';
           const statusData = [
+            // Display the detailed message from checkAlchemyConnection
             { key: 'Alchemy Status', value: `${statusIcon} ${connectionResult.message}` },
             { key: 'Network', value: NETWORK_INFO.name },
-            { key: 'Chain ID', value: NETWORK_INFO.chainId.toString() }, // Ensure string
+            { key: 'Chain ID', value: NETWORK_INFO.chainId.toString() },
             { key: 'Environment', value: NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet' },
-            { key: 'RPC Endpoint', value: NETWORK_INFO.viemChain.rpcUrls.default.http[0] }
+            { key: 'RPC Endpoint', value: NETWORK_INFO.viemChain.rpcUrls.default.http[0] } // Ensure this path is correct
           ];
           await printer.printKeyValues(statusData);
-          await printer.print(''); // Blank line
+          await printer.print(''); // Blank line for spacing
           if (connectionResult.success) {
             await printer.success('Ready to execute blockchain queries!');
           } else {
-            await printer.warning('Please check your VITE_ALCHEMY_API_KEY and network settings.');
+            // The message from checkAlchemyConnection already contains guidance
+            await printer.warning('Review the status message above for details and recommended actions.');
           }
           return { output: '', success: connectionResult.success };
         } // status case closed
