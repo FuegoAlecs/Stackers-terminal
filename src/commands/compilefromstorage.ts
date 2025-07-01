@@ -46,12 +46,26 @@ export const compileFromStorageCommand: CommandHandler = {
 
     const sourceCode = sessionStorage.getItem(sourceCodeKey)
 
-    if (!sourceCode) {
+    // --- BEGIN DEBUG LOGGING ---
+    printer.info(`[DEBUG] Value retrieved from sessionStorage for key "${sourceCodeKey}": ${sourceCode === null ? 'null' : `"${sourceCode}"` (length: ${sourceCode?.length})`);
+    // --- END DEBUG LOGGING ---
+
+    if (sourceCode === null) { // Explicitly check for null (key not found or value is literally null)
       printer.error(`Contract ${contractFilename} not found in session storage.`)
-      printer.info(`[DEBUG] Failed to find source code with key: "${sourceCodeKey}"`)
+      printer.info(`[DEBUG] Failed to find source code with key: "${sourceCodeKey}" because value was null.`)
       printer.info(`Use "upload ${contractFilename}" to upload it first, then "lsuploads" to check available contracts.`)
       return { output: '', success: false }
     }
+
+    if (sourceCode === "") { // Check for empty string
+      printer.error(`Contract file ${contractFilename} from session storage is empty.`)
+      printer.info(`[DEBUG] Failed to compile because source code for key "${sourceCodeKey}" was an empty string.`)
+      printer.info(`Please upload a valid Solidity file with content.`)
+      return { output: '', success: false }
+    }
+
+    // If sourceCode is not null and not an empty string, it implies !sourceCode would be false for these cases.
+    // The original !sourceCode would catch both null and empty string. We've made it more specific.
 
     printer.info(`Compiling ${contractFilename} from session storage...`)
 
