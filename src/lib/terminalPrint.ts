@@ -268,12 +268,9 @@ export function createPrinter(terminal: TerminalPrinter) { // terminal: Terminal
     table: async function (headers: string[], rows: string[][], tableOptions: Table.TableConstructorOptions = {}) {
       const { cols } = terminal.getDimensions();
       // Ensure headers and rows are arrays of strings, convert if necessary (e.g. null/undefined to '')
-      const sanitizedHeaders = headers.map(h => String(h ?? ''));
-      const sanitizedRows = rows.map(row => row.map(cell => String(cell ?? '')));
-
-      const { cols } = terminal.getDimensions();
-      const sanitizedHeaders = headers.map(h => String(h ?? ''));
-      const sanitizedRows = rows.map(row => row.map(cell => String(cell ?? '')));
+      const sanitizedHeaders = headers.map(h => String(h ?? '')); // Keep this
+      const sanitizedRows = rows.map(row => row.map(cell => String(cell ?? ''))); // Keep this
+      // The duplicate declarations of cols, sanitizedHeaders, and sanitizedRows were here. Removed them.
 
       const calculatedColWidths = tableOptions.colWidths || this.calculateColWidths(sanitizedHeaders, sanitizedRows, cols);
 
