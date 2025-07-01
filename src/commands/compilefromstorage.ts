@@ -31,10 +31,24 @@ export const compileFromStorageCommand: CommandHandler = {
     }
 
     const sourceCodeKey = `contract:${contractFilename}`
+
+    // --- BEGIN DEBUG LOGGING ---
+    printer.info(`[DEBUG] Attempting to fetch from sessionStorage with key: "${sourceCodeKey}"`)
+    const allSessionKeys: string[] = []
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i)
+      if (key) {
+        allSessionKeys.push(key)
+      }
+    }
+    printer.info(`[DEBUG] Keys currently in sessionStorage: ${JSON.stringify(allSessionKeys)}`)
+    // --- END DEBUG LOGGING ---
+
     const sourceCode = sessionStorage.getItem(sourceCodeKey)
 
     if (!sourceCode) {
       printer.error(`Contract ${contractFilename} not found in session storage.`)
+      printer.info(`[DEBUG] Failed to find source code with key: "${sourceCodeKey}"`)
       printer.info(`Use "upload ${contractFilename}" to upload it first, then "lsuploads" to check available contracts.`)
       return { output: '', success: false }
     }
