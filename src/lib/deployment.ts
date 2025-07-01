@@ -78,35 +78,28 @@ export async function deployContract(options: DeploymentOptions): Promise<Deploy
       }
     }
 
-    // Prepare constructor arguments
-    let encodedArgs = '0x'
-    if (options.constructorArgs && options.constructorArgs.length > 0) {
-      try {
-        encodedArgs = encodeConstructorArgs(options.abi, options.constructorArgs)
-      } catch (error) {
-        return {
-          success: false,
-          error: `Invalid constructor arguments: ${error instanceof Error ? error.message : 'Unknown error'}`
-        }
-      }
-    }
+    // Constructor arguments are expected to be correctly typed and ordered in options.constructorArgs
+    // The parseConstructorArgs function in commands/deploy.ts should handle string-to-type conversion.
 
-    // Prepare deployment bytecode
-    const deploymentBytecode = `0x${options.bytecode}${encodedArgs.slice(2)}`
+    // Bytecode should be just the contract's creation bytecode.
+    const deploymentBytecode = options.bytecode.startsWith('0x') ? options.bytecode : `0x${options.bytecode}`;
 
     // Estimate gas
     let gasLimit = options.gasLimit
     if (!gasLimit) {
       try {
-        gasLimit = await alchemyViemClient.estimateGas({
+        const estimatedGasVal = await alchemyViemClient.estimateGas({
           account,
-          data: deploymentBytecode as `0x${string}`
-        })
-        // Add 20% buffer
-        gasLimit = Math.floor(Number(gasLimit) * 1.2)
+          data: deploymentBytecode as `0x${string}`,
+          args: options.constructorArgs // Pass args to estimateGas as well for accuracy
+        });
+        gasLimit = Math.floor(Number(estimatedGasVal) * 1.2); // Add 20% buffer
       } catch (error) {
-        // Fallback gas limit
-        gasLimit = 500000
+        console.error("Gas estimation failed:", error);
+        return {
+          success: false,
+          error: `Gas estimation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Consider setting a manual gas limit with --gas-limit.`
+        };
       }
     }
 
@@ -114,7 +107,8 @@ export async function deployContract(options: DeploymentOptions): Promise<Deploy
     let gasPrice = options.gasPrice
     if (!gasPrice) {
       const currentGasPrice = await alchemyUtils.getGasPrice()
-      gasPrice = `${currentGasPrice.gwei + 1}` // Add 1 Gwei for faster confirmation
+      // Ensure gas price is reasonable, add a small margin if desired
+      gasPrice = `${Math.max(currentGasPrice.gwei, 1) + 1}`; // Ensure at least 1 Gwei + buffer
     }
 
     // Deploy the contract
@@ -122,35 +116,64 @@ export async function deployContract(options: DeploymentOptions): Promise<Deploy
       abi: options.abi,
       bytecode: deploymentBytecode as `0x${string}`,
       account,
+      args: options.constructorArgs, // Pass constructor arguments here
       gas: BigInt(gasLimit),
       gasPrice: parseGwei(gasPrice)
-    })
+    });
 
     // Wait for transaction confirmation
     const receipt = await alchemyViemClient.waitForTransactionReceipt({
       hash,
-      timeout: 60000 // 60 seconds timeout
-    })
+      timeout: 60000 // 60 seconds timeout, can be adjusted
+    });
+
+    if (receipt.status !== 'success') { // Viem uses 'success' or 'reverted'
+      return {
+        success: false,
+        error: `Transaction reverted. Status: ${receipt.status}. Gas used: ${receipt.gasUsed.toString()}. Review transaction on block explorer.`,
+        transactionHash: hash,
+        blockNumber: Number(receipt.blockNumber),
+        gasUsed: Number(receipt.gasUsed)
+      };
+    }
+
+    if (!receipt.contractAddress) {
+      return {
+        success: false,
+        error: 'Deployment transaction succeeded but no contract address was found. This can happen if it was not a contract creation or an early revert without proper status.',
+        transactionHash: hash,
+        blockNumber: Number(receipt.blockNumber),
+        gasUsed: Number(receipt.gasUsed)
+      };
+    }
 
     // Calculate total cost
-    const totalCostWei = receipt.gasUsed * receipt.effectiveGasPrice
-    const totalCostEth = parseFloat(formatEther(totalCostWei))
+    const totalCostWei = receipt.gasUsed * receipt.effectiveGasPrice;
+    const totalCostEth = parseFloat(formatEther(totalCostWei));
 
     return {
       success: true,
-      contractAddress: receipt.contractAddress || undefined,
+      contractAddress: receipt.contractAddress,
       transactionHash: hash,
       blockNumber: Number(receipt.blockNumber),
       gasUsed: Number(receipt.gasUsed),
       gasPrice: `${parseFloat(formatEther(receipt.effectiveGasPrice * BigInt(1e9))).toFixed(2)} Gwei`,
       totalCost: `${totalCostEth.toFixed(6)} ETH`
-    }
+    };
 
   } catch (error) {
+    // Handle specific timeout error for better user feedback
+    if (error instanceof Error && error.message.toLowerCase().includes('timeout')) {
+      return {
+        success: false,
+        error: `Transaction confirmation timed out after 60 seconds. It might still be pending or have failed. Check block explorer for hash: ${hash}`,
+        transactionHash: hash // Include hash if available
+      };
+    }
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown deployment error'
-    }
+    };
   }
 }
 
@@ -249,24 +272,6 @@ function parseArgumentByType(arg: string, type: string): any {
   } catch (error) {
     throw new Error(`Failed to parse argument "${arg}" as ${type}: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
-}
-
-/**
- * Encode constructor arguments for deployment
- */
-function encodeConstructorArgs(abi: any[], args: string[]): string {
-  if (args.length === 0) {
-    return '0x'
-  }
-  
-  const constructor = abi.find(item => item.type === 'constructor')
-  if (!constructor) {
-    throw new Error('Contract has no constructor')
-  }
-  
-  // This is a simplified encoding - in production, use a proper ABI encoder
-  // For now, we'll return empty bytes and let viem handle the encoding
-  return '0x'
 }
 
 /**

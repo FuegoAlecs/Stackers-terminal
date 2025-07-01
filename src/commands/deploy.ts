@@ -216,18 +216,30 @@ Fix compilation errors and try again.`,
             }
           }
           
-          const mainContract = compileResult.contracts![contractNames[0]]
-          const mainContractName = contractNames[0]
+          const mainContract = compileResult.contracts![contractNames[0]];
+          const mainContractName = contractNames[0];
+
+          // Parse CLI string args into typed args using ABI
+          let typedConstructorArgs: any[];
+          try {
+            // deploymentArgs.args are strings from parseDeploymentFlags
+            typedConstructorArgs = parseConstructorArgs(mainContract.abi, deploymentArgs.args);
+          } catch (error) {
+            return {
+              output: `❌ Invalid constructor arguments: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              success: false,
+            };
+          }
           
           // Deploy the contract
           const deployResult = await deployContract({
             contractName: mainContractName,
             abi: mainContract.abi,
             bytecode: mainContract.bytecode,
-            constructorArgs: deploymentArgs.args,
+            constructorArgs: typedConstructorArgs, // Pass the correctly typed args
             gasLimit: deploymentArgs.gasLimit,
             gasPrice: deploymentArgs.gasPrice
-          })
+          });
           
           if (!deployResult.success) {
             return {
