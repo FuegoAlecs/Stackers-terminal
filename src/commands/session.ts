@@ -42,7 +42,7 @@ export const sessionCommand: CommandHandler = {
     
     try {
       switch (subcommand) {
-        case 'info':
+        case 'info': { // Added scope
           const session = sessionManager.getSession();
           const stats = sessionManager.getStats();
           

@@ -60,7 +60,7 @@ export const historyCommand: CommandHandler = {
           success: true
         }
       
-      case 'search':
+      case 'search': { // Added scope
         if (args.length < 2) {
           return {
             output: `Usage: history search <text>
@@ -95,6 +95,7 @@ Examples:
         
         await printer.print(`\n💡 Use !<number> to repeat any of these commands`);
         return { output: '', success: true };
+      } // Close 'search' scope
       
       case 'export':
         const exportData = commandHistory.export()

@@ -51,8 +51,8 @@ Examples:
     const subcommand = args[0].toLowerCase();
     
     switch (subcommand) {
-      case 'list':
-        const listAliases = aliasManager.getAll(); // Renamed to avoid conflict
+      case 'list': { // Added scope
+        const listAliases = aliasManager.getAll();
         
         if (listAliases.length === 0) {
           await printer.print('No aliases defined.');
@@ -71,8 +71,9 @@ Examples:
   • Aliases persist across terminal sessions
   • Use "alias search <text>" to find specific aliases`);
         return { output: '', success: true };
+      } // Close 'list' scope
       
-      case 'search':
+      case 'search': { // Added scope
         if (args.length < 2) {
           return {
             output: `Usage: alias search <text>
@@ -105,6 +106,7 @@ Examples:
         
         await printer.print(`\n💡 Use any of these aliases by typing the alias name`);
         return { output: '', success: true };
+      } // Close 'search' scope
       
       case 'clear':
         const count = aliasManager.size()
