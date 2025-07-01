@@ -76,9 +76,10 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const writeToTerminal = (text: string, newLine = true) => {
     if (xtermRef.current) {
-      xtermRef.current.write(text + (newLine ? '\r\n' : '')) // Reverted to \r\n
+      // Ensure consistent CRLF line endings when newLine is true
+      xtermRef.current.write(text + (newLine ? '\r\n' : ''));
     }
-  }
+  };
 
   const writePrompt = () => {
     // Show wallet status in prompt if connected
@@ -290,6 +291,10 @@ const Terminal: React.FC<TerminalProps> = ({
       cursorStyle: 'block', // Ensure block cursor
       fontSize: 14,
       fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+      convertEol: true, // Ensure \n is converted to \r\n on Windows if necessary (though we explicitly use \r\n)
+      wordWrap: true, // Enable global word wrapping
+      // Depending on xterm.js version, `wordWrap` might be enough or you might need:
+      // wrapOnWordBoundary: true, // if available and distinct from wordWrap
       theme: {
         background: '#0a0a0a', // Dark background
         foreground: '#ffffff', // White text
