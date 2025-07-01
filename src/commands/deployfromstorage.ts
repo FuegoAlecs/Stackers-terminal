@@ -88,10 +88,20 @@ export const deployFromStorageCommand: CommandHandler = {
     const bytecode = sessionStorage.getItem(bytecodeKey)
 
     if (!abiString || !bytecode) {
-      printer.error(`ABI or Bytecode for ${contractNameInFile} (from ${contractFilename}) not found in session storage.`)
-      printer.info(`Please compile it first using: compilefromstorage ${contractFilename}`)
+      printer.error(`ABI or Bytecode for contract '${contractNameInFile}' (from file '${contractFilename}') not found in session storage.`)
+      if (!abiString) {
+        printer.info(`(Debug: Attempted to retrieve ABI key '${abiKey}')`)
+      }
+      if (!bytecode) {
+        printer.info(`(Debug: Attempted to retrieve bytecode key '${bytecodeKey}')`)
+      }
+      printer.info(`Please ensure filenames and contract names match exactly (including case).`)
+      printer.info(`Compile the contract first using: compilefromstorage ${contractFilename}`)
       return { output: '', success: false }
     }
+
+    // Also good to log what keys ARE being used on a successful path, subtly.
+    printer.info(`Using ABI from key '${abiKey}' and bytecode from key '${bytecodeKey}'.`)
 
     let abi
     try {

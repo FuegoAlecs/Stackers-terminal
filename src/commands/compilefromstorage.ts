@@ -31,15 +31,45 @@ export const compileFromStorageCommand: CommandHandler = {
     }
 
     const sourceCodeKey = `contract:${contractFilename}`
-    const sourceCode = sessionStorage.getItem(sourceCodeKey)
+    printer.info(`[DEBUG] Attempting to fetch from sessionStorage with key: "${sourceCodeKey}"`)
 
-    if (!sourceCode) {
-      printer.error(`Contract ${contractFilename} not found in session storage.`)
-      printer.info(`Use "upload ${contractFilename}" to upload it first, then "lsuploads" to check available contracts.`)
+    const directGetItemResult = sessionStorage.getItem(sourceCodeKey)
+    printer.info(`[DEBUG] Direct result of sessionStorage.getItem("${sourceCodeKey}"):`)
+    printer.info(`  Type: ${typeof directGetItemResult}`)
+    printer.info(`  Value: ${directGetItemResult === null ? 'null' : `"${directGetItemResult}"`}`) // Show quotes for string, explicitly 'null' for null
+
+    printer.info(`[DEBUG] Iterating through all sessionStorage keys:`)
+    let foundInLoop = false;
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i)
+      if (k === null) { // Should not happen with spec-compliant sessionStorage
+        printer.info(`  [Loop ${i}] sessionStorage.key(${i}) returned null`)
+        continue;
+      }
+      const v = sessionStorage.getItem(k)
+      printer.info(`  [Loop ${i}] Key: "${k}" | Value snippet: "${v ? v.substring(0, 30) + (v.length > 30 ? '...' : '') : String(v)}"`)
+      if (k === sourceCodeKey) {
+        printer.info(`    🎉 [Loop ${i}] Found matching key: "${k}"`)
+        printer.info(`    Value from loop getItem: "${v}"`)
+        foundInLoop = true;
+      }
+    }
+    if (!foundInLoop) {
+        printer.info(`[DEBUG] Target key "${sourceCodeKey}" was NOT found during direct iteration of sessionStorage keys.`)
+    }
+
+
+    const sourceCode = directGetItemResult // Use the value we logged
+
+    if (!sourceCode) { // Check if it's null, undefined, or empty string
+      printer.error(`Contract source for '${contractFilename}' not found or is empty in session storage.`)
+      printer.info(`(Debug: Attempted to retrieve key '${sourceCodeKey}')`)
+      printer.info(`Please ensure the filename matches exactly (including case) what 'lsuploads' shows and that the file had content.`)
+      printer.info(`Use "upload ${contractFilename}" to upload it, or "lsuploads" to see available contracts.`)
       return { output: '', success: false }
     }
 
-    printer.info(`Compiling ${contractFilename} from session storage...`)
+    printer.info(`Compiling ${contractFilename} from session storage (using key '${sourceCodeKey}', content length: ${sourceCode.length})...`)
 
     const compilationResult: CompilationResult = await compileSoliditySource(sourceCode, contractFilename);
 
