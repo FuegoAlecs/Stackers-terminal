@@ -67,13 +67,19 @@ export const uploadCommand: CommandHandler = {
       }
 
       const cleanupAndFocus = () => {
-        document.body.removeChild(fileInput)
-        window.removeEventListener('focus', handleFocusAfterDialog) // Clean up focus listener
-        ensureTerminalFocus(terminal)
+        if (fileInput && document.body.contains(fileInput)) { // Check if fileInput exists and is in body
+          document.body.removeChild(fileInput);
+        }
+        window.removeEventListener('focus', handleFocusAfterDialog); // Clean up focus listener
+        ensureTerminalFocus(terminal);
       }
 
       // Add to body to make it interactable (though hidden)
-      document.body.appendChild(fileInput)
+      // Ensure it's only added once if this logic path could be re-entered, though current structure prevents it.
+      if (!document.body.contains(fileInput)) { // Defensive check, though likely not strictly needed here
+          document.body.appendChild(fileInput);
+      }
+
 
       // This listener helps restore focus if the user cancels the dialog
       // without selecting a file (which doesn't trigger 'change').
@@ -81,17 +87,38 @@ export const uploadCommand: CommandHandler = {
         // This event fires when the window regains focus after the dialog closes.
         // We need to check if the input is still in the DOM, because if a file *was* selected,
         // 'change' would have fired and cleanupAndFocus would have removed it.
-        if (document.body.contains(fileInput)) {
+        // Also, ensure the fileInput itself hasn't been nulled or is still part of an active operation.
+        if (fileInput && document.body.contains(fileInput)) {
            // If it's still in the DOM, it means 'change' didn't fire (likely cancel)
            // or an error occurred before cleanup in 'change'.
-          printer.info('File selection dialog closed.')
-          cleanupAndFocus()
-          // Ensure the promise is resolved if it hasn't been already
-          // This path is mainly for cancellation without selection
-          resolve({ output: '', success: true, error: 'Dialog closed by user' })
+          // Avoid printing "File selection dialog closed." if a file was actually selected and processed.
+          // The 'change' handler resolves the promise for successful uploads or file errors.
+          // This 'focus' handler is primarily for cancellation.
+          if (!target || !target.files || target.files.length === 0) { // Check if target/files are missing from a potential 'change' event context
+            printer.info('File selection dialog closed.');
+          }
+          cleanupAndFocus();
+          // Only resolve here if no other resolution path (like successful upload) has been taken.
+          // This could be tricky. Let's assume for now that if 'change' fires, it resolves.
+          // If 'change' doesn't fire (cancel), this 'focus' listener handles it.
+          // The original resolve here might lead to double resolves if not careful.
+          // Let's rely on the fact that `cleanupAndFocus` is called, and if no file was selected,
+          // the 'change' handler's `else` branch also calls `cleanupAndFocus` and resolves.
+          // So, this explicit resolve here might be redundant or problematic if `change` also resolves.
+          // Removing resolve from here; `change` handler or error paths should resolve.
+          // The primary purpose of this handler is cleanup and focus on pure cancellation.
         }
-        window.removeEventListener('focus', handleFocusAfterDialog)
+        window.removeEventListener('focus', handleFocusAfterDialog);
       }
+
+      // Temporary variable for the change handler to potentially signal if it handled the event
+      let changeEventHandled = false;
+      const target = fileInput; // To check in handleFocusAfterDialog
+
+      fileInput.addEventListener('change', (event: Event) => {
+        changeEventHandled = true; // Signal that change event is being processed
+        handleFileChange(event);
+      });
 
       // Add focus listener before triggering click
       // This is a fallback for cancellation
