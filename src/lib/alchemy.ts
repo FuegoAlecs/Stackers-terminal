@@ -239,13 +239,31 @@ export const viemUtils = {
 export const NETWORK_INFO = networkConfig
 
 // Health check function
-export const checkAlchemyConnection = async (): Promise<boolean> => {
+export const checkAlchemyConnection = async (): Promise<{ success: boolean; message: string }> => {
+  if (!ALCHEMY_API_KEY) {
+    return { success: false, message: 'VITE_ALCHEMY_API_KEY is not set in environment variables.' };
+  }
   try {
-    await alchemy.core.getBlockNumber()
-    return true
-  } catch (error) {
-    console.error('Alchemy connection failed:', error)
-    return false
+    // Attempt a more specific call that's likely to require a valid API key,
+    // for example, getting transaction history for a zero address (should be cheap and fast).
+    // Replace with a better check if Alchemy provides a dedicated health/auth check endpoint.
+    await alchemy.core.getAssetTransfers({
+        fromAddress: '0x0000000000000000000000000000000000000000', // Zero address
+        maxCount: 1, // We only need to see if the call authenticates
+        category: ['external']
+    });
+    return { success: true, message: 'Successfully connected to Alchemy and validated API key.' };
+  } catch (error: any) {
+    let errorMessage = 'Alchemy connection failed.';
+    if (error.message) {
+      errorMessage += ` Details: ${error.message}`;
+    }
+    // Check for common API key related errors if possible (pseudo-code, actual error structure may vary)
+    if (error.code === -32000 || (error.message && error.message.includes('API key'))) {
+        errorMessage = 'Alchemy API key is invalid or does not have permissions.';
+    }
+    console.error('Alchemy connection failed:', error);
+    return { success: false, message: errorMessage };
   }
 }
 

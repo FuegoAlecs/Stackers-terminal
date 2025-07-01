@@ -40,18 +40,23 @@ Aliases: al status, al balance, etc.`,
     try {
       switch (subcommand) {
         case 'status': {
-          const isConnected = await checkAlchemyConnection();
+          const connectionResult = await checkAlchemyConnection();
+          const statusIcon = connectionResult.success ? '✅' : '❌';
           const statusData = [
-            { key: 'Alchemy Connection', value: isConnected ? '✅ Connected' : '❌ Failed' },
+            { key: 'Alchemy Status', value: `${statusIcon} ${connectionResult.message}` },
             { key: 'Network', value: NETWORK_INFO.name },
-            { key: 'Chain ID', value: NETWORK_INFO.chainId },
+            { key: 'Chain ID', value: NETWORK_INFO.chainId.toString() }, // Ensure string
             { key: 'Environment', value: NETWORK_INFO.isTestnet ? 'Testnet' : 'Mainnet' },
             { key: 'RPC Endpoint', value: NETWORK_INFO.viemChain.rpcUrls.default.http[0] }
           ];
           await printer.printKeyValues(statusData);
           await printer.print(''); // Blank line
-          await printer.print(isConnected ? 'Ready to execute blockchain queries!' : 'Check your API key configuration.');
-          return { output: '', success: isConnected };
+          if (connectionResult.success) {
+            await printer.success('Ready to execute blockchain queries!');
+          } else {
+            await printer.warning('Please check your VITE_ALCHEMY_API_KEY and network settings.');
+          }
+          return { output: '', success: connectionResult.success };
         } // status case closed
         
         case 'balance': { // Added scope
