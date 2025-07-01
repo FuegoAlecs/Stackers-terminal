@@ -15,16 +15,26 @@ async function loadSolc(version: string): Promise<any> {
     // We'll try to construct it, but a lookup against list.json would be more robust.
     // However, `loadRemoteVersion` in solc should handle finding the full path.
     try {
-      console.log(`[Worker] Loading solc version: ${version}`);
+      console.log(`[Worker] Attempting to load solc version: ${version} using wrapper.loadRemoteVersion`);
       // @ts-ignore - solc types might not perfectly match worker context for loadRemoteVersion
-      wrapper.loadRemoteVersion(version, (err: Error | null, compiler: any) => {
+      wrapper.loadRemoteVersion(version, (err: Error | null, compilerInstance: any) => {
         if (err) {
-          console.error('[Worker] Error loading solc:', err);
+          console.error(`[Worker] CRITICAL: loadRemoteVersion callback error for version ${version}:`, err);
           reject(err);
         } else {
-          console.log('[Worker] Solc loaded successfully:', compiler.version());
-          solcCompiler = compiler;
-          resolve(compiler);
+          console.log(`[Worker] loadRemoteVersion callback for ${version}: typeof compilerInstance = ${typeof compilerInstance}`);
+          const instanceVersion = compilerInstance && typeof compilerInstance.version === 'function' ? compilerInstance.version() : 'Instance has no version function or instance undefined';
+          console.log(`[Worker] loadRemoteVersion callback for ${version}: compilerInstance.version? ${instanceVersion}`);
+          console.log(`[Worker] loadRemoteVersion callback for ${version}: typeof compilerInstance.compile = ${compilerInstance ? typeof compilerInstance.compile : 'compilerInstance undefined'}`);
+
+          console.log(`[Worker] Assigning to global solcCompiler for version ${version}.`);
+          solcCompiler = compilerInstance;
+          if (solcCompiler && typeof solcCompiler.version === 'function') {
+            console.log(`[Worker] Global solcCompiler is now version: ${solcCompiler.version()}`);
+          } else {
+            console.warn(`[Worker] Global solcCompiler may not be correctly assigned or is not a valid compiler object after loading ${version}.`);
+          }
+          resolve(compilerInstance);
         }
       });
     } catch (e) {
@@ -56,9 +66,30 @@ self.onmessage = async (event: MessageEvent) => {
         await loadSolc(solcVersion);
       }
 
-      if (!solcCompiler) {
-        throw new Error('Solc compiler not loaded.');
+      // Enhanced logging before checking !solcCompiler
+      console.log(`[Worker] Pre-compile check: typeof solcCompiler = ${typeof solcCompiler}`);
+      const currentVersion = solcCompiler && typeof solcCompiler.version === 'function' ? solcCompiler.version() : 'No version function or solcCompiler undefined';
+      console.log(`[Worker] Pre-compile check: solcCompiler.version? ${currentVersion}`);
+      console.log(`[Worker] Pre-compile check: typeof solcCompiler.compile = ${solcCompiler ? typeof solcCompiler.compile : 'solcCompiler undefined'}`);
+      if (solcCompiler) {
+        try {
+          console.log(`[Worker] Pre-compile check: solcCompiler keys: ${Object.keys(solcCompiler).join(', ')}`);
+        } catch (kerr) {
+          console.error(`[Worker] Pre-compile check: Error getting Object.keys(solcCompiler): ${kerr}`);
+        }
       }
+
+
+      if (!solcCompiler) {
+        // This error will be caught by the try-catch block below
+        throw new Error('[Worker] CRITICAL: Solc compiler is not loaded or defined before compile attempt.');
+      }
+
+      // Additional check for compile function
+      if (typeof solcCompiler.compile !== 'function') {
+        throw new Error(`[Worker] CRITICAL: solcCompiler.compile is not a function. Type is ${typeof solcCompiler.compile}. Compiler version: ${currentVersion}`);
+      }
+
 
       const input = {
         language: 'Solidity',
