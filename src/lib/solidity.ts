@@ -295,6 +295,59 @@ export async function compileSolidity(
 }
 
 /**
+ * Compile Solidity source code directly using the Web Worker.
+ * This is intended for use when the source code is already available (e.g., from sessionStorage).
+ */
+export async function compileSoliditySource(
+  sourceCode: string,
+  contractFilename: string, // The original filename, e.g., "MyContract.sol"
+  solcVersion: string = '0.8.26'
+): Promise<CompilationResult> {
+  const worker = getSolcWorker();
+
+  if (!sourceCode || sourceCode.trim() === '') {
+    return {
+      success: false,
+      errors: ['Cannot compile empty source code.']
+    };
+  }
+
+  return new Promise<CompilationResult>((resolve, reject) => {
+    const messageHandler = (event: MessageEvent) => {
+      console.log('[Main] Received message from worker (compileSoliditySource):', event.data);
+      if (event.data && typeof event.data.success === 'boolean') {
+        worker.removeEventListener('message', messageHandler);
+        resolve(event.data as CompilationResult);
+      }
+    };
+
+    const errorHandler = (event: ErrorEvent) => {
+      console.error('[Main] Error from Solc Worker during compilation (compileSoliditySource):', event);
+      worker.removeEventListener('message', messageHandler);
+      worker.removeEventListener('error', errorHandler);
+      reject({
+        success: false,
+        errors: [`Worker error during compilation: ${event.message}`]
+      } as CompilationResult);
+    };
+
+    worker.addEventListener('message', messageHandler);
+    worker.addEventListener('error', errorHandler);
+
+    console.log(`[Main] Posting 'compile' message to worker for ${contractFilename} (from source) with version ${solcVersion}`);
+    worker.postMessage({
+      action: 'compile',
+      payload: {
+        contractSourceName: contractFilename, // Pass the original filename
+        sourceCode: sourceCode,
+        solcVersion
+      }
+    });
+  });
+}
+
+
+/**
  * Get available contract names
  */
 export function getAvailableContracts(): string[] {
