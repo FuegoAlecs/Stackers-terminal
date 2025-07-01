@@ -26,9 +26,6 @@ const Terminal: React.FC<TerminalProps> = ({
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const hiddenInputRef = useRef<HTMLInputElement>(null); // Ref for the hidden input
-
-  const [isMobile, setIsMobile] = useState(false); // State to track if mobile
 
   // currentLine state is still useful for React's rendering cycle if needed,
   // but we'll primarily use currentLineRef for the imperative onKey handler.
@@ -69,12 +66,6 @@ const Terminal: React.FC<TerminalProps> = ({
     // Use the new centralized context setter
     setCommandWalletContext(walletContext)
   }, [walletContext])
-
-  useEffect(() => {
-    // Basic mobile detection
-    const checkMobile = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    setIsMobile(checkMobile());
-  }, []);
 
   // Update session when wallet changes
   useEffect(() => {
@@ -369,22 +360,12 @@ const Terminal: React.FC<TerminalProps> = ({
     }
 
     // Set up event listeners
-    if (!isMobile) {
-      console.log('[DEBUG_EFFECT] Setting up term.onKey listener for desktop.');
-      term.onKey(({ key, domEvent }) => {
-        handleKeyPress(key, domEvent);
-      });
-      console.log('[DEBUG_EFFECT] term.onKey listener SET for desktop.');
-    } else {
-      console.log('[DEBUG_EFFECT] Mobile device detected. Skipping term.onKey, will use hidden input.');
-      // For mobile, focus the hidden input when the terminal is clicked/tapped
-      terminalRef.current?.addEventListener('click', () => {
-        hiddenInputRef.current?.focus();
-      });
-      // Initial focus for mobile if terminal is primary interaction element
-      // setTimeout(() => hiddenInputRef.current?.focus(), 100); // Small delay to ensure it's rendered
-    }
-
+    console.log('[DEBUG_EFFECT] Setting up term.onKey listener...');
+    term.onKey(({ key, domEvent }) => {
+      // console.log('[DEBUG_EFFECT] term.onKey fired. Key:', key); // This might be too noisy for every key
+      handleKeyPress(key, domEvent);
+    });
+    console.log('[DEBUG_EFFECT] term.onKey listener SET.');
 
     // Enhanced welcome message with colors
     const printer = createPrinter({
@@ -455,26 +436,11 @@ const Terminal: React.FC<TerminalProps> = ({
     window.addEventListener('resize', handleResize);
     console.log('[DEBUG_EFFECT] Resize listener added.');
 
-    // Attempt to focus hidden input on mobile if terminal is ready
-    if (isMobile) {
-      setTimeout(() => {
-        if (terminalRef.current && hiddenInputRef.current) { // Check if component is still mounted
-          hiddenInputRef.current.focus();
-          console.log('[DEBUG_EFFECT] Attempted initial focus on hiddenInput for mobile.');
-        }
-      }, 100);
-    }
-
     // Cleanup
-    const currentTerminalRef = terminalRef.current; // Capture for cleanup
     return () => {
       console.log('[DEBUG_EFFECT] useEffect cleanup function running.');
       window.removeEventListener('resize', handleResize);
       console.log('[DEBUG_EFFECT] Resize listener removed.');
-      if (isMobile && currentTerminalRef) {
-        currentTerminalRef.removeEventListener('click', () => hiddenInputRef.current?.focus());
-        console.log('[DEBUG_EFFECT] Mobile click listener removed.');
-      }
       if (xtermRef.current) {
         console.log('[DEBUG_EFFECT] Disposing xtermRef.current.');
         xtermRef.current.dispose();
@@ -489,7 +455,7 @@ const Terminal: React.FC<TerminalProps> = ({
         console.log('[DEBUG_EFFECT] fitAddonRef.current nulled.');
       }
     };
-  }, [welcomeMessage, isMobile]); // Added isMobile to dependencies
+  }, [welcomeMessage]);
 
   // Update prompt when wallet connection changes
   useEffect(() => {
@@ -506,49 +472,6 @@ const Terminal: React.FC<TerminalProps> = ({
       'w-screen h-screen flex flex-col bg-black', // Full screen, flex column
       className
     )}>
-      {isMobile && (
-        <input
-          ref={hiddenInputRef}
-          type="text"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="none"
-          spellCheck="false"
-          onKeyDown={(e) => {
-            if (!xtermRef.current || isProcessing) return;
-            // Allow handleKeyPress to manage special keys from the hidden input too
-            // We pass the event directly. handleKeyPress will decide what to do.
-            // For printable characters, onInput will handle them.
-            // For special keys like Enter, Backspace, Arrows, Tab, Escape:
-            if (e.key === 'Enter' || e.key === 'Backspace' || e.key.startsWith('Arrow') || e.key === 'Tab' || e.key === 'Escape') {
-              e.preventDefault(); // Prevent default input field behavior for these keys
-              handleKeyPress(e.key, e.nativeEvent as KeyboardEvent);
-            }
-            // For other non-printable keys, we might let them pass or handle as needed.
-          }}
-          onInput={(e: React.ChangeEvent<HTMLInputElement>) => {
-            if (!xtermRef.current || isProcessing) return;
-            const inputText = e.target.value;
-            if (inputText) {
-              // This assumes handleKeyPress can also be called with just the character for simplicity,
-              // or we directly write and update currentLine.
-              // Let's try direct write and update for simplicity with mobile input.
-              xtermRef.current.write(inputText);
-              setCurrentLine(prev => prev + inputText);
-              // Clear the hidden input after processing
-              e.target.value = '';
-            }
-          }}
-          style={{
-            position: 'absolute',
-            top: '-9999px',
-            left: '-9999px',
-            opacity: 0,
-            width: '1px',
-            height: '1px',
-          }}
-        />
-      )}
       {/* Terminal Header Removed */}
       
       {/* Terminal Content */}
@@ -556,11 +479,6 @@ const Terminal: React.FC<TerminalProps> = ({
         ref={terminalRef} 
         className="flex-grow w-full focus:outline-none p-2" // flex-grow to take available space
         // DEBUG style removed: style={{ border: '1px solid red', minHeight: '100px' }}
-        onClick={() => { // Ensure terminal click also focuses hidden input on mobile
-          if (isMobile) {
-            hiddenInputRef.current?.focus();
-          }
-        }}
       />
     </div>
   )

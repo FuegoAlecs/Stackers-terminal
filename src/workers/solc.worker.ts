@@ -1,54 +1,93 @@
 /// <reference lib="webworker" />
 
-import wrapper from 'solc/wrapper';
-import { type CompilationResult } from '../lib/solidity'; // Assuming CompilationResult is exported
+import { solidityCompiler, getCompilerVersions, SolcVersion } from '@agnostico/browser-solidity-compiler';
+import { type CompilationResult } from '../lib/solidity';
 
-// Keep track of the loaded compiler
-let solcCompiler: any = null;
+interface CompilerBuild {
+  path: string;
+  version: string;
+  build: string;
+  longVersion: string;
+  keccak256: string;
+  sha256: string;
+  urls: string[];
+  [key: string]: any; // For other properties like 'latestRelease'
+}
 
-// Function to load a specific solc version
-async function loadSolc(version: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    // Check if https://binaries.soliditylang.org/bin/list.json contains the full version string
-    // For now, we'll assume the short version string is enough, but this might need adjustment
-    // e.g. for 0.8.26 it might be 'soljson-v0.8.26+commit.8a97fa7a.js'
-    // We'll try to construct it, but a lookup against list.json would be more robust.
-    // However, `loadRemoteVersion` in solc should handle finding the full path.
-    try {
-      console.log(`[Worker] Attempting to load solc version: ${version} using wrapper.loadRemoteVersion`);
-      // @ts-ignore - solc types might not perfectly match worker context for loadRemoteVersion
-      wrapper.loadRemoteVersion(version, (err: Error | null, compilerInstance: any) => {
-        if (err) {
-          console.error(`[Worker] CRITICAL: loadRemoteVersion callback error for version ${version}:`, err);
-          reject(err);
-        } else {
-          console.log(`[Worker] loadRemoteVersion callback for ${version}: typeof compilerInstance = ${typeof compilerInstance}`);
-          const instanceVersion = compilerInstance && typeof compilerInstance.version === 'function' ? compilerInstance.version() : 'Instance has no version function or instance undefined';
-          console.log(`[Worker] loadRemoteVersion callback for ${version}: compilerInstance.version? ${instanceVersion}`);
-          console.log(`[Worker] loadRemoteVersion callback for ${version}: typeof compilerInstance.compile = ${compilerInstance ? typeof compilerInstance.compile : 'compilerInstance undefined'}`);
+interface CompilerVersionList {
+  releases: Record<string, string>;
+  builds: CompilerBuild[];
+  latestRelease: string;
+}
 
-          console.log(`[Worker] Assigning to global solcCompiler for version ${version}.`);
-          solcCompiler = compilerInstance;
-          if (solcCompiler && typeof solcCompiler.version === 'function') {
-            console.log(`[Worker] Global solcCompiler is now version: ${solcCompiler.version()}`);
-          } else {
-            console.warn(`[Worker] Global solcCompiler may not be correctly assigned or is not a valid compiler object after loading ${version}.`);
-          }
-          resolve(compilerInstance);
-        }
-      });
-    } catch (e) {
-      console.error('[Worker] Exception during loadRemoteVersion call:', e);
-      reject(e);
-    }
-  });
+let compilerVersionList: CompilerVersionList | null = null;
+let versionLoadPromise: Promise<CompilerVersionList | null> | null = null;
+
+async function loadSolidityVersions(): Promise<CompilerVersionList | null> {
+  if (compilerVersionList) {
+    return compilerVersionList;
+  }
+  if (versionLoadPromise) {
+    return versionLoadPromise;
+  }
+
+  console.log('[Worker] Fetching Solidity compiler versions...');
+  versionLoadPromise = getCompilerVersions()
+    .then((versions: any) => { // Type from library is SolcVersion, but it's an object with builds, releases, latestRelease
+      console.log('[Worker] Successfully fetched compiler versions.');
+      compilerVersionList = versions as CompilerVersionList;
+      return compilerVersionList;
+    })
+    .catch(error => {
+      console.error('[Worker] Failed to fetch compiler versions:', error);
+      versionLoadPromise = null; // Reset promise so it can be tried again
+      throw error; // Re-throw to be caught by caller
+    });
+  return versionLoadPromise;
+}
+
+// Pre-warm the compiler versions list
+loadSolidityVersions().catch(err => {
+  console.error('[Worker] Initial pre-warm of compiler versions failed:', err);
+});
+
+function findFullCompilerPath(shortVersion: string): string | null {
+  if (!compilerVersionList || !compilerVersionList.builds) {
+    console.error('[Worker] Compiler versions not loaded or invalid structure.');
+    return null;
+  }
+  // The 'builds' array contains objects with a 'path' (e.g., "soljson-v0.8.26+commit.8a97fa7a.js")
+  // and a 'version' (e.g., "0.8.26").
+  // We need to find the build that matches the shortVersion.
+  const foundBuild = compilerVersionList.builds.find(build => build.version === shortVersion);
+
+  if (foundBuild) {
+    return `https://binaries.soliditylang.org/bin/${foundBuild.path}`;
+  }
+  console.warn(`[Worker] Full compiler path for short version "${shortVersion}" not found.`);
+  // Fallback: try to find latest release if exact match fails and version is a major.minor (e.g. "0.8")
+  if (shortVersion.match(/^\d+\.\d+$/) && compilerVersionList.latestRelease) {
+      const latestReleaseBuild = compilerVersionList.builds.find(build => build.version === compilerVersionList!.latestRelease);
+      if (latestReleaseBuild && latestReleaseBuild.version.startsWith(shortVersion)) {
+          console.warn(`[Worker] Using latest release ${latestReleaseBuild.version} as fallback for ${shortVersion}`);
+          return `https://binaries.soliditylang.org/bin/${latestReleaseBuild.path}`;
+      }
+  }
+  // Fallback: try to find the first one that contains the version string (less precise)
+   const lessPreciseMatch = compilerVersionList.builds.find(build => build.path.includes(`v${shortVersion}`));
+   if (lessPreciseMatch) {
+    console.warn(`[Worker] Using less precise match ${lessPreciseMatch.path} for version ${shortVersion}`);
+    return `https://binaries.soliditylang.org/bin/${lessPreciseMatch.path}`;
+   }
+
+  return null;
 }
 
 self.onmessage = async (event: MessageEvent) => {
   const { action, payload } = event.data;
 
   if (action === 'compile') {
-    const { contractSourceName, sourceCode, solcVersion = '0.8.26' } = payload;
+    const { contractSourceName, sourceCode, solcVersion = '0.8.26' } = payload; // Default to a recent version
 
     if (!contractSourceName || !sourceCode) {
       self.postMessage({
@@ -59,61 +98,32 @@ self.onmessage = async (event: MessageEvent) => {
     }
 
     try {
-      if (!solcCompiler || (solcCompiler && solcCompiler.version() !== solcVersion && !solcCompiler.version().startsWith(solcVersion))) {
-        // A more robust check would be to compare the full version string if available
-        // For now, if major.minor.patch is different, reload.
-        console.log(`[Worker] Current compiler version ${solcCompiler?.version()} does not match requested ${solcVersion}. Reloading.`);
-        await loadSolc(solcVersion);
+      await loadSolidityVersions(); // Ensure versions are loaded
+
+      const fullCompilerPath = findFullCompilerPath(solcVersion);
+      if (!fullCompilerPath) {
+        throw new Error(`[Worker] Failed to find compiler path for version ${solcVersion}.`);
       }
 
-      // Enhanced logging before checking !solcCompiler
-      console.log(`[Worker] Pre-compile check: typeof solcCompiler = ${typeof solcCompiler}`);
-      const currentVersion = solcCompiler && typeof solcCompiler.version === 'function' ? solcCompiler.version() : 'No version function or solcCompiler undefined';
-      console.log(`[Worker] Pre-compile check: solcCompiler.version? ${currentVersion}`);
-      console.log(`[Worker] Pre-compile check: typeof solcCompiler.compile = ${solcCompiler ? typeof solcCompiler.compile : 'solcCompiler undefined'}`);
-      if (solcCompiler) {
-        try {
-          console.log(`[Worker] Pre-compile check: solcCompiler keys: ${Object.keys(solcCompiler).join(', ')}`);
-        } catch (kerr) {
-          console.error(`[Worker] Pre-compile check: Error getting Object.keys(solcCompiler): ${kerr}`);
-        }
-      }
+      console.log(`[Worker] Compiling ${contractSourceName} using ${fullCompilerPath}`);
 
-
-      if (!solcCompiler) {
-        // This error will be caught by the try-catch block below
-        throw new Error('[Worker] CRITICAL: Solc compiler is not loaded or defined before compile attempt.');
-      }
-
-      // Additional check for compile function
-      if (typeof solcCompiler.compile !== 'function') {
-        throw new Error(`[Worker] CRITICAL: solcCompiler.compile is not a function. Type is ${typeof solcCompiler.compile}. Compiler version: ${currentVersion}`);
-      }
-
-
-      const input = {
-        language: 'Solidity',
-        sources: {
-          [contractSourceName]: { // Use the dynamic contract source name
-            content: sourceCode
-          }
-        },
-        settings: {
-          outputSelection: {
-            '*': {
-              '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode', 'evm.gasEstimates', 'metadata']
-            }
-          },
+      const output = await solidityCompiler({
+        version: fullCompilerPath, // This should be the full URL to the soljson file
+        contractBody: sourceCode,
+        options: {
           optimizer: {
             enabled: true,
-            runs: 200
-          }
-        }
-      };
+            runs: 200,
+          },
+          outputSelection: {
+            '*': {
+              '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode', 'evm.gasEstimates', 'metadata'],
+            },
+          },
+        },
+      });
 
-      console.log('[Worker] Compiling with input:', JSON.stringify(input, null, 2));
-      const output = JSON.parse(solcCompiler.compile(JSON.stringify(input)));
-      console.log('[Worker] Compilation output:', JSON.stringify(output, null, 2));
+      console.log('[Worker] Raw compilation output:', output);
 
       const errors: string[] = [];
       const warnings: string[] = [];
@@ -122,61 +132,103 @@ self.onmessage = async (event: MessageEvent) => {
         output.errors.forEach((error: any) => {
           if (error.severity === 'error') {
             errors.push(error.formattedMessage || error.message);
-          } else {
+          } else if (error.severity === 'warning') {
             warnings.push(error.formattedMessage || error.message);
           }
         });
       }
 
+      // @agnostico/browser-solidity-compiler might return status: false for errors
+      if (output.status === false && errors.length === 0) {
+          errors.push('Compilation failed. Check compiler output for details.');
+          // Sometimes the actual errors are in output.result.errors
+          if (output.result?.errors) {
+             output.result.errors.forEach((error: any) => {
+                if (error.severity === 'error') {
+                    errors.push(error.formattedMessage || error.message);
+                } else if (error.severity === 'warning') {
+                    warnings.push(error.formattedMessage || error.message);
+                }
+            });
+          }
+      }
+
+
       if (errors.length > 0) {
         self.postMessage({
           success: false,
           errors,
-          warnings: warnings.length > 0 ? warnings : undefined
+          warnings: warnings.length > 0 ? warnings : undefined,
         } as CompilationResult);
         return;
       }
 
       const compiledContracts: CompilationResult['contracts'] = {};
-      // The key in output.contracts will be the contractSourceName (e.g., 'Hello.sol')
-      if (output.contracts && output.contracts[contractSourceName]) {
-        for (const contractName in output.contracts[contractSourceName]) {
-          const contract = output.contracts[contractSourceName][contractName];
+      // The output structure from @agnostico/browser-solidity-compiler:
+      // output.contracts: { ContractName1: { abi, evm: { bytecode: { object: "..." } }, ... } }
+      // OR output.result.contracts: { "filename.sol" : { ContractName1: { ... } } }
+
+      let contractsData = output.contracts;
+      if (!contractsData && output.result?.contracts) {
+        // If contracts are nested under filename, extract them.
+        // Assuming single file compilation, take the first entry.
+        const fileNameKey = Object.keys(output.result.contracts)[0];
+        if (fileNameKey) {
+          contractsData = output.result.contracts[fileNameKey];
+        }
+      }
+
+      if (contractsData) {
+        for (const contractName in contractsData) {
+          const contract = contractsData[contractName];
           compiledContracts[contractName] = {
             abi: contract.abi || [],
             bytecode: contract.evm?.bytecode?.object || '',
             deployedBytecode: contract.evm?.deployedBytecode?.object || '',
             gasEstimates: contract.evm?.gasEstimates,
-            metadata: contract.metadata
+            metadata: contract.metadata,
           };
         }
+      }
+
+      if (Object.keys(compiledContracts).length === 0 && errors.length === 0) {
+        warnings.push('[Worker] Compilation was successful, but no deployable contracts were found.');
       }
 
       self.postMessage({
         success: true,
         contracts: compiledContracts,
-        warnings: warnings.length > 0 ? warnings : undefined
+        warnings: warnings.length > 0 ? warnings : undefined,
       } as CompilationResult);
 
     } catch (error: any) {
-      console.error('[Worker] Compilation error:', error);
+      console.error('[Worker] Uncaught error during compilation process:', error);
       self.postMessage({
         success: false,
-        errors: [`[Worker] Compilation failed: ${error.message}`]
+        errors: [`[Worker] Compilation failed: ${error.message || 'Unknown error during compilation'}`],
       } as CompilationResult);
     }
   } else if (action === 'loadVersion') {
-    const { solcVersion = '0.8.26' } = payload;
+    // This action is mostly to pre-warm or check versions
     try {
-      await loadSolc(solcVersion);
-      self.postMessage({ success: true, action: 'versionLoaded', version: solcCompiler?.version() });
+      const versions = await loadSolidityVersions();
+      self.postMessage({
+        success: true,
+        action: 'versionLoaded',
+        latestRelease: versions?.latestRelease,
+        numberOfBuilds: versions?.builds?.length || 0,
+      });
     } catch (error: any) {
-      self.postMessage({ success: false, action: 'versionLoadFailed', error: error.message });
+      self.postMessage({
+        success: false,
+        action: 'versionLoadFailed',
+        error: error.message,
+      });
     }
+  } else {
+    console.warn(`[Worker] Unknown action: ${action}`);
+    self.postMessage({ success: false, errors: [`[Worker] Unknown action: ${action}`] });
   }
 };
 
-// Optionally, pre-load a default version when the worker starts
-// loadSolc('0.8.26').catch(err => console.error("[Worker] Initial solc load failed:", err));
-
-console.log('[Worker] Solc worker initialized.');
+console.log('[Worker] New solc.worker.ts initialized with @agnostico/browser-solidity-compiler.');
