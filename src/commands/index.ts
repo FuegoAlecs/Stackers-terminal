@@ -26,6 +26,7 @@ import './tutorials'
 import './upload' // Add new upload command
 import './lsuploads' // Add new lsuploads command
 import './compilefromstorage' // Add new compilefromstorage command
+import './deployfromstorage' // Add new deployfromstorage command
 
 // Export the command router for use in components
 export { commandRouter } from '../lib/CommandRouter'
