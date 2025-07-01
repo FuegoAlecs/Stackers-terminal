@@ -1,7 +1,22 @@
 /// <reference lib="webworker" />
 
-import wrapper from 'solc/wrapper';
-import { type CompilationResult } from '../lib/solidity'; // Assuming CompilationResult is exported
+// import wrapper from 'solc/wrapper'; // Old import
+import * as solcWrapperModule from 'solc/wrapper'; // New import style
+import { type CompilationResult } from '../lib/solidity';
+
+// Attempt to get the actual wrapper function, handling CJS/ESM interop
+const wrapper = solcWrapperModule.default || solcWrapperModule;
+
+if (typeof wrapper !== 'function') {
+  console.error('[Worker] CRITICAL FAILURE: solc/wrapper did not load as a function. Loaded module:', solcWrapperModule);
+  // Post error message to main thread to make this visible
+  self.postMessage({
+    success: false,
+    errors: ['[Worker] CRITICAL: solc/wrapper did not load correctly. Compilation disabled.']
+  } as CompilationResult);
+  // Throwing an error here will terminate the worker, which is appropriate if it can't function.
+  throw new Error("[Worker] solc/wrapper did not resolve to a function. Worker cannot operate.");
+}
 
 // Keep track of the loaded compiler
 let solcCompiler: any = null;
